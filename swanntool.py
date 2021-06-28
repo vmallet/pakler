@@ -1,12 +1,7 @@
 import struct
 import sys
 
-# typedef struct _TblEntry {
-#   char name[32];
-#   char version[24];
-#   unsigned int start;
-#   unsigned int len;
-# } TblEntry;
+SWANN_MAGIC = 0x32725913
 
 SECTION_FORMAT = "<32s24sII"
 SECTION_FIELDS = ['name', #TODO: Docs
@@ -14,7 +9,6 @@ SECTION_FIELDS = ['name', #TODO: Docs
                   'start',
                   'len']
 SECTION_STRINGS = ['name', 'version']
-
 SECTION_SIZE = struct.calcsize(SECTION_FORMAT) # 64
 SECTION_COUNT = 10
 
@@ -42,56 +36,42 @@ def fix_strings(object, fields):
         # x = cstr.split('\0')[0]
         setattr(object, field, x)
 
+def quote_string(string, min_length):
+    return "{0:{1}s}".format('"{}"'.format(string), min_length)
 
 class Section(object):
     def __init__(self, buf):
         fields = dict(list(zip(SECTION_FIELDS, struct.unpack(SECTION_FORMAT,buf))))
         for key in fields:
             setattr(self, key, fields[key])
-        setattr(self, 'errors', [])
 
         fix_strings(self, SECTION_STRINGS)
 
-        self._check_errors(buf[:-4])
-
     def __repr__(self):
-        return 'Section name="{}" version="{}" start={:08x}  len={:08x}'.format(self.name, self.version, self.start, self.len)
+        return 'Section name={} version={} start={:08x}  len={:08x}'.format(quote_string(self.name, 16), quote_string(self.version, 16), self.start, self.len)
 
     def __iter__(self):
         for key in dir(self):
             if not key.startswith('_'):
                 yield key, getattr(self, key)
 
-    def _check_errors(self, buf_crc):
-        pass
-        # if self.magic != UBI_EC_HDR_MAGIC:
-        #     log(ec_hdr, 'Wrong MAGIC: expected %s got %s' % (UBI_EC_HDR_MAGIC, self.magic))
-        #     self.errors.append('magic')
 
 class MtdPart(object):
     def __init__(self, buf):
         fields = dict(list(zip(MTD_PART_FIELDS, struct.unpack(MTD_PART_FORMAT,buf))))
         for key in fields:
             setattr(self, key, fields[key])
-        setattr(self, 'errors', [])
 
         fix_strings(self, MTD_PART_STRINGS)
 
-        self._check_errors(buf[:-4])
-
     def __repr__(self):
-        return 'Mtd_part name="{}" mtd="{}" a={:08x} start={:08x}  len={:08x}'.format(self.name, self.mtd, self.a, self.start, self.len)
+        return 'Mtd_part name={} mtd={}  a={:08x}  start={:08x}  len={:08x}'.format(
+            quote_string(self.name,16), quote_string(self.mtd, 16), self.a, self.start, self.len)
 
     def __iter__(self):
         for key in dir(self):
             if not key.startswith('_'):
                 yield key, getattr(self, key)
-
-    def _check_errors(self, buf_crc):
-        pass
-        # if self.magic != UBI_EC_HDR_MAGIC:
-        #     log(ec_hdr, 'Wrong MAGIC: expected %s got %s' % (UBI_EC_HDR_MAGIC, self.magic))
-        #     self.errors.append('magic')
 
 
 class Header(object):
@@ -103,10 +83,8 @@ class Header(object):
 
     def __init__(self, buf):
         fields = dict(list(zip(HEADER_FIELDS, struct.unpack(HEADER_FORMAT,buf[0:12]))))
-
         for key in fields:
             setattr(self, key, fields[key])
-        setattr(self, 'errors', [])
 
         buf = buf[12:]
         for a in range(0, SECTION_COUNT):
@@ -120,18 +98,17 @@ class Header(object):
         self._check_errors(buf[:-4])
 
     def __repr__(self):
-        return 'Header  magic={:08x} crc32={:08x}  type={:08x}  sections=<{}>'.format(self.magic, self.crc32, self.type,
-                                                                                      len(self.sections))
+        return 'Header  magic={:08x}  crc32={:08x}  type={:08x}  sections=<{}>  mtd_parts=<{}>'.format(
+            self.magic, self.crc32, self.type, len(self.sections), len(self.mtd_parts))
+
     def __iter__(self):
         for key in dir(self):
             if not key.startswith('_'):
                 yield key, getattr(self, key)
 
     def _check_errors(self, buf_crc):
-        pass
-        # if self.magic != UBI_EC_HDR_MAGIC:
-        #     log(ec_hdr, 'Wrong MAGIC: expected %s got %s' % (UBI_EC_HDR_MAGIC, self.magic))
-        #     self.errors.append('magic')
+        if self.magic != SWANN_MAGIC:
+            raise Exception("Wrong header magic: expected {:08x}, got {:08x}".format(SWANN_MAGIC, self.magic))
 
     def print_debug(self):
         print(self)
@@ -159,15 +136,10 @@ def read_header(filename):
         header.print_debug()
 
 
-
-
 def main(argv):
     filename = argv[0]
 
     read_header(filename)
-
-
-
 
 
 if __name__ == "__main__":
