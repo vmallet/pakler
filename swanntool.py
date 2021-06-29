@@ -1,5 +1,8 @@
 import struct
 import sys
+import zlib
+
+CHUNK_SIZE = 128 * 1024
 
 SWANN_MAGIC = 0x32725913
 
@@ -66,7 +69,7 @@ class MtdPart(object):
 
     def __repr__(self):
         return 'Mtd_part name={} mtd={}  a={:08x}  start={:08x}  len={:08x}'.format(
-            quote_string(self.name,16), quote_string(self.mtd, 16), self.a, self.start, self.len)
+            quote_string(self.name, 16), quote_string(self.mtd, 16), self.a, self.start, self.len)
 
     def __iter__(self):
         for key in dir(self):
@@ -131,15 +134,45 @@ def read_header(filename):
 
         header = Header(buf)
 
-        print("header: {}".format(header))
+    return header
 
-        header.print_debug()
+
+def calc_crc(filename):
+    crc = 0xffffffff
+    with open(filename, "rb") as f:
+        f.seek(HEADER_SIZE)
+
+        for chunk in iter(lambda: f.read(CHUNK_SIZE), b''):
+            crc = zlib.crc32(chunk, crc)
+
+        buf = b'\2\0\0\0' # TODO explain...
+        crc = zlib.crc32(buf, crc)
+
+        f.seek(12)
+        buf = f.read(SECTION_COUNT * SECTION_SIZE)
+        crc = zlib.crc32(buf, crc)
+
+    crc = crc ^ 0xffffffff
+    return crc
+
+
+def check_crc(filename):
+    header = read_header(filename)
+    crc = calc_crc(filename)
+
+    if crc != header.crc32:
+        print("CRC MISMATCH, file: {}, header.crc={:08x}, got={:08x}".format(filename, header.crc32, crc))
+    else:
+        print("File passes CRC check: {}".format(filename))
 
 
 def main(argv):
     filename = argv[0]
 
-    read_header(filename)
+    header = read_header(filename)
+    header.print_debug()
+
+    check_crc(filename)
 
 
 if __name__ == "__main__":
