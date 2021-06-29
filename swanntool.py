@@ -1,6 +1,5 @@
 import argparse
 import struct
-import sys
 import zlib
 
 CHUNK_SIZE = 128 * 1024
@@ -31,7 +30,13 @@ HEADER_FORMAT = "<III"
 HEADER_FIELDS = ['magic',
                  'crc32',
                  'type']
-HEADER_SIZE = struct.calcsize(HEADER_FORMAT) + (SECTION_COUNT * SECTION_SIZE) + (MTD_PART_COUNT * MTD_PART_SIZE)
+
+
+def calc_header_size(section_count, mtd_part_count = None):
+    if not mtd_part_count:
+        mtd_part_count = section_count
+
+    return struct.calcsize(HEADER_FORMAT) + (section_count * SECTION_SIZE) + (mtd_part_count * MTD_PART_SIZE)
 
 
 def fix_strings(object, fields):
@@ -87,17 +92,17 @@ class Header(object):
     sections = []
     mtd_parts = []
 
-    def __init__(self, buf):
-        fields = dict(list(zip(HEADER_FIELDS, struct.unpack(HEADER_FORMAT,buf[0:12]))))
+    def __init__(self, buf, section_count, mtd_part_count):
+        fields = dict(list(zip(HEADER_FIELDS, struct.unpack(HEADER_FORMAT, buf[0:12]))))
         for key in fields:
             setattr(self, key, fields[key])
 
         buf = buf[12:]
-        for a in range(0, SECTION_COUNT):
+        for a in range(0, section_count):
             self.sections.append(Section(buf[0:SECTION_SIZE]))
             buf = buf[SECTION_SIZE:]
 
-        for a in range(0, MTD_PART_COUNT):
+        for a in range(0, mtd_part_count):
             self.mtd_parts.append(MtdPart(buf[0:MTD_PART_SIZE]))
             buf = buf[MTD_PART_SIZE:]
 
@@ -129,21 +134,27 @@ def usage(argv, exitcode):
     exit(exitcode)
 
 
-def read_header(filename):
-    with open(filename, "rb") as f:
-        buf = f.read(HEADER_SIZE)
-        if len(buf) != HEADER_SIZE:
-            raise Exception("size error")
+def read_header(filename, section_count, mtd_part_count = None):
+    if not mtd_part_count:
+        mtd_part_count = section_count
 
-        header = Header(buf)
+    header_size = calc_header_size(section_count, mtd_part_count)
+
+    with open(filename, "rb") as f:
+        buf = f.read(header_size)
+        if len(buf) != header_size:
+            raise Exception("Header size error, expected: {}, got: {}".format(header_size, len(buf)))
+
+        header = Header(buf, section_count, mtd_part_count)
 
     return header
 
 
-def calc_crc(filename):
+def calc_crc(filename, section_count):
+    header_size = calc_header_size(section_count)
     crc = 0xffffffff
     with open(filename, "rb") as f:
-        f.seek(HEADER_SIZE)
+        f.seek(header_size)
 
         for chunk in iter(lambda: f.read(CHUNK_SIZE), b''):
             crc = zlib.crc32(chunk, crc)
@@ -152,16 +163,16 @@ def calc_crc(filename):
         crc = zlib.crc32(buf, crc)
 
         f.seek(12)
-        buf = f.read(SECTION_COUNT * SECTION_SIZE)
+        buf = f.read(section_count * SECTION_SIZE)
         crc = zlib.crc32(buf, crc)
 
     crc = crc ^ 0xffffffff
     return crc
 
 
-def check_crc(filename):
-    header = read_header(filename)
-    crc = calc_crc(filename)
+def check_crc(filename, section_count, mtd_part_count = None):
+    header = read_header(filename, section_count, mtd_part_count)
+    crc = calc_crc(filename, section_count)
 
     if crc != header.crc32:
         print("CRC MISMATCH, file: {}, header.crc={:08x}, got={:08x}".format(filename, header.crc32, crc))
@@ -180,7 +191,7 @@ def parse_args():
     parser.add_argument('-o', '--output', dest='output_pak', help='Name of the output PAK file')
     parser.add_argument('-c', '--section-count', dest='section_count', type=int, default=SECTION_COUNT,
                         help='Number of sections in source PAK file (default {})'.format(SECTION_COUNT))
-    parser.add_argument('filename', nargs=2, help='Name of PAK firmware file')
+    parser.add_argument('filename', nargs=1, help='Name of PAK firmware file')
 
     args = parser.parse_args()
     print("args: {}".format(args))
@@ -197,9 +208,9 @@ def main():
     filename = args.filename[0]
 
     if args.list:
-        header = read_header(filename)
+        header = read_header(filename, args.section_count)
         header.print_debug()
-        check_crc(filename)
+        check_crc(filename, args.section_count)
     elif args.replace:
         pass
 
