@@ -59,7 +59,8 @@ class Section(object):
         fix_strings(self, SECTION_STRINGS)
 
     def __repr__(self):
-        return 'Section name={} version={} start={:08x}  len={:08x}'.format(quote_string(self.name, 16), quote_string(self.version, 16), self.start, self.len)
+        return 'Section name={} version={} start={:08x}  len={:08x}  (start={:8} len={:8})'.format(
+            quote_string(self.name, 16), quote_string(self.version, 16), self.start, self.len, self.start, self.len)
 
     def __iter__(self):
         for key in dir(self):
