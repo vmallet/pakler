@@ -31,6 +31,8 @@ HEADER_FORMAT = "<III"
 HEADER_FIELDS = ['magic',
                  'crc32',
                  'type']
+HEADER_CRC_OFFSET = 4  # Offset of the CRC in the file
+HEADER_HEADER_SIZE = struct.calcsize(HEADER_FORMAT)  # Size of the header's header (first 12 bytes)
 
 
 def calc_header_size(section_count, mtd_part_count = None):
@@ -54,6 +56,11 @@ def quote_string(string, min_length):
 class Section(object):
     def __init__(self, buf, num):
         self.num = num
+        self.name = None
+        self.version = None
+        self.start = 0
+        self.len = 0
+
         fields = dict(list(zip(SECTION_FIELDS, struct.unpack(SECTION_FORMAT,buf))))
         for key in fields:
             setattr(self, key, fields[key])
@@ -69,9 +76,18 @@ class Section(object):
             if not key.startswith('_'):
                 yield key, getattr(self, key)
 
+    def serialize(self):
+        return struct.pack(SECTION_FORMAT, self.name.encode(), self.version.encode(), self.start, self.len)
+
 
 class MtdPart(object):
     def __init__(self, buf):
+        self.name = None
+        self.a = 0
+        self.mtd = None
+        self.start = 0
+        self.len = 0
+
         fields = dict(list(zip(MTD_PART_FIELDS, struct.unpack(MTD_PART_FORMAT,buf))))
         for key in fields:
             setattr(self, key, fields[key])
@@ -87,20 +103,27 @@ class MtdPart(object):
             if not key.startswith('_'):
                 yield key, getattr(self, key)
 
+    def serialize(self):
+        return struct.pack(MTD_PART_FORMAT, self.name.encode(), self.a, self.mtd.encode(), self.start, self.len)
+
 
 class Header(object):
-    magic = 0
-    crc32 = 0
-    type = 0
-    sections = []
-    mtd_parts = []
-
     def __init__(self, buf, section_count, mtd_part_count):
-        fields = dict(list(zip(HEADER_FIELDS, struct.unpack(HEADER_FORMAT, buf[0:12]))))
+        self.magic = 0
+        self.crc32 = 0
+        self.type = 0
+        self.sections = []
+        self.mtd_parts = []
+
+        self.size = calc_header_size(section_count, mtd_part_count)
+        if len(buf) != self.size:
+            raise Exception("Invalid header buffer size, expected: {}, got: {}".format(self.size, len(buf)))
+
+        fields = dict(list(zip(HEADER_FIELDS, struct.unpack(HEADER_FORMAT, buf[0:HEADER_HEADER_SIZE]))))
         for key in fields:
             setattr(self, key, fields[key])
 
-        buf = buf[12:]
+        buf = buf[HEADER_HEADER_SIZE:]
         for num in range(0, section_count):
             self.sections.append(Section(buf[0:SECTION_SIZE], num))
             buf = buf[SECTION_SIZE:]
@@ -130,6 +153,19 @@ class Header(object):
             print("    {}".format(section))
         for part in self.mtd_parts:
             print("    {}".format(part))
+
+    def serialize(self):
+        buf = struct.pack(HEADER_FORMAT, self.magic, self.crc32, self.type)
+        for section in self.sections:
+            buf += section.serialize()
+        for mtd_part in self.mtd_parts:
+            buf += mtd_part.serialize()
+
+        if len(buf) != self.size:
+            raise Exception("Serialization error: should have been {} bytes, but produced: {} bytes".format(
+                self.size, len(buf)))
+
+        return buf
 
 
 def usage(argv, exitcode):
@@ -165,7 +201,7 @@ def calc_crc(filename, section_count):
         buf = b'\2\0\0\0' # TODO explain...
         crc = zlib.crc32(buf, crc)
 
-        f.seek(12)
+        f.seek(HEADER_HEADER_SIZE)
         buf = f.read(section_count * SECTION_SIZE)
         crc = zlib.crc32(buf, crc)
 
@@ -183,6 +219,14 @@ def check_crc(filename, section_count, mtd_part_count = None):
         print("File passes CRC check: {}".format(filename))
 
 
+def update_crc(filename, section_count):
+    crc = calc_crc(filename, section_count)
+
+    with open(filename, "r+b") as f:
+        f.seek(HEADER_CRC_OFFSET)
+        f.write(struct.pack("<I", crc))
+
+
 def make_section_filename(section):
     #TODO: should sanitize section name before turning it into a filename
     if section.name:
@@ -190,17 +234,26 @@ def make_section_filename(section):
     return "{:02}.bin".format(section.num)
 
 
-def make_output_dir_name(filename):
-    base = filename + ".extracted"
-    dirname = base
+def find_new_name(base):
+    name = base
     suffix = 0
-    while os.path.exists(dirname):
+    while os.path.exists(name):
         suffix += 1
         if suffix == 1000:
-            raise Exception("Could not find a non-existing directory for base: {}".format(base))
-        dirname = "{}.{:03}".format(base, suffix)
+            raise Exception("Could not find a non-existing file/directory for base: {}".format(base))
+        name = "{}.{:03}".format(base, suffix)
 
-    return dirname
+    return name
+
+
+def make_output_file_name(filename):
+    base = filename + ".replaced"
+    return find_new_name(base)
+
+
+def make_output_dir_name(filename):
+    base = filename + ".extracted"
+    return find_new_name(base)
 
 
 def copy(fin, fout, len):
@@ -240,6 +293,50 @@ def extract(filename, output_dir, include_empty, section_count, mtd_part_count=N
                 print("Skipping empty section {}".format(section.num))
 
 
+def replace_section(filename, section_file, section_num, output_file, section_count, mtd_part_count=None):
+    header = read_header(filename, section_count, mtd_part_count)
+    new_header = read_header(filename, section_count, mtd_part_count)
+
+    if not os.path.isfile(section_file):
+        raise Exception("Section file doesn't exist or is not a file: {}".format(section_file))
+
+    section_len = os.path.getsize(section_file)
+
+    if section_num < 0 or section_num >= section_count:
+        raise Exception("Invalid section number: {} (should be between 0 and {})".format(section_num, section_count))
+
+    print("Input            : {}".format(filename))
+    print("Output           : {}".format(output_file))
+    print("Replacing section: {}".format(section_num))
+    print("Replacement file : {}".format(section_file))
+
+    with open(filename, "rb") as f, open(section_file, "rb") as fsection, open(output_file, "wb") as fout:
+        # Write placeholder header
+        fout.write(bytearray(new_header.size))
+
+        for section in header.sections:
+            f.seek(section.start)
+            new_header.sections[section.num].start = fout.tell() #TODO: set up a check in Header.init() to validate sections[num].num==num
+            if section.num == section_num:
+                new_header.sections[section.num].len = section_len
+                print("Replacing section {} ({} bytes)".format(section.num, section_len))
+                copy(fsection, fout, section_len)
+            else:
+                print("Copying section {} ({} bytes)".format(section.num, section.len))
+                copy(f, fout, section.len)
+
+        print("Writing header... ({} bytes)".format(new_header.size))
+        fout.seek(0)
+        fout.write(new_header.serialize())
+
+    print("Updating CRC...")
+    update_crc(output_file, section_count)
+
+    print("Replacement completed. New header: ")
+    replaced_header = read_header(output_file, section_count)
+    replaced_header.print_debug()
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description='swanntool (by Vincent Mallet 2021)')
 
@@ -250,6 +347,8 @@ def parse_args():
                         help='Replace a section into a new PAK file')
     pgroup.add_argument('-e', '--extract', dest='extract', action='store_true',
                         help='Extract sections to a directory')
+    parser.add_argument('-f', '--section-file', dest='section_file', help='Input binary file for section replacement')
+    parser.add_argument('-n', '--section-num', dest='section_num', type=int, help='Section number of replaced section')
     parser.add_argument('-o', '--output', dest='output_pak', help='Name of the output PAK file')
     parser.add_argument('-d', '--output-dir', dest='output_dir',
                         help='Name of output directory when extracting sections')
@@ -282,6 +381,11 @@ def main():
         print("output: {}".format(output_dir))
         extract(filename, output_dir, args.include_empty, args.section_count)
     elif args.replace:
+        if not args.section_file or not args.section_num:
+            raise Exception("replace error: need both section binary file and section number to do a replacement;"
+                            " see help")
+        output_file = args.output_pak or make_output_file_name(filename)
+        replace_section(filename, args.section_file, args.section_num, output_file, args.section_count)
         pass
 
 
