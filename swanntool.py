@@ -1,3 +1,4 @@
+import argparse
 import struct
 import sys
 import zlib
@@ -168,16 +169,40 @@ def check_crc(filename):
         print("File passes CRC check: {}".format(filename))
 
 
-def main(argv):
-    filename = argv[0]
+def parse_args():
+    parser = argparse.ArgumentParser(description='swanntool (by Vincent Mallet 2021)')
 
-    header = read_header(filename)
-    header.print_debug()
+    pgroup = parser.add_mutually_exclusive_group()
+    pgroup.add_argument('-l', '--list', dest='list', action='store_true',
+                        help='List contents of PAK firmware file (default)')
+    pgroup.add_argument('-r', '--replace', dest='replace', action='store_true',
+                        help='Replace a section into a new PAK file')
+    parser.add_argument('-o', '--output', dest='output_pak', help='Name of the output PAK file')
+    parser.add_argument('-c', '--section-count', dest='section_count', type=int, default=SECTION_COUNT,
+                        help='Number of sections in source PAK file (default {})'.format(SECTION_COUNT))
+    parser.add_argument('filename', nargs=2, help='Name of PAK firmware file')
 
-    check_crc(filename)
+    args = parser.parse_args()
+    print("args: {}".format(args))
+
+    # Set default action as "list"
+    if not (args.list or args.replace):
+        args.list = True
+
+    return args
+
+
+def main():
+    args = parse_args()
+    filename = args.filename[0]
+
+    if args.list:
+        header = read_header(filename)
+        header.print_debug()
+        check_crc(filename)
+    elif args.replace:
+        pass
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        usage(sys.argv, 1)
-    main(sys.argv[1:])
+    main()
