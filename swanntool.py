@@ -32,15 +32,17 @@ HEADER_FIELDS = ['magic',
                  'type']
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT) + (SECTION_COUNT * SECTION_SIZE) + (MTD_PART_COUNT * MTD_PART_SIZE)
 
+
 def fix_strings(object, fields):
     for field in fields:
         cstr = getattr(object, field)
-        x = cstr.rstrip(b'\0').decode('utf-8')
-        # x = cstr.split('\0')[0]
-        setattr(object, field, x)
+        fixed = cstr.rstrip(b'\0').decode('utf-8')
+        setattr(object, field, fixed)
+
 
 def quote_string(string, min_length):
     return "{0:{1}s}".format('"{}"'.format(string), min_length)
+
 
 class Section(object):
     def __init__(self, buf):
