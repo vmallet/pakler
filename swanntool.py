@@ -1,4 +1,5 @@
 import argparse
+import os.path
 import struct
 import zlib
 
@@ -51,7 +52,8 @@ def quote_string(string, min_length):
 
 
 class Section(object):
-    def __init__(self, buf):
+    def __init__(self, buf, num):
+        self.num = num
         fields = dict(list(zip(SECTION_FIELDS, struct.unpack(SECTION_FORMAT,buf))))
         for key in fields:
             setattr(self, key, fields[key])
@@ -99,11 +101,11 @@ class Header(object):
             setattr(self, key, fields[key])
 
         buf = buf[12:]
-        for a in range(0, section_count):
-            self.sections.append(Section(buf[0:SECTION_SIZE]))
+        for num in range(0, section_count):
+            self.sections.append(Section(buf[0:SECTION_SIZE], num))
             buf = buf[SECTION_SIZE:]
 
-        for a in range(0, mtd_part_count):
+        for num in range(0, mtd_part_count):
             self.mtd_parts.append(MtdPart(buf[0:MTD_PART_SIZE]))
             buf = buf[MTD_PART_SIZE:]
 
@@ -181,6 +183,63 @@ def check_crc(filename, section_count, mtd_part_count = None):
         print("File passes CRC check: {}".format(filename))
 
 
+def make_section_filename(section):
+    #TODO: should sanitize section name before turning it into a filename
+    if section.name:
+        return "{:02}_{}.bin".format(section.num, section.name)
+    return "{:02}.bin".format(section.num)
+
+
+def make_output_dir_name(filename):
+    base = filename + ".extracted"
+    dirname = base
+    suffix = 0
+    while os.path.exists(dirname):
+        suffix += 1
+        if suffix == 1000:
+            raise Exception("Could not find a non-existing directory for base: {}".format(base))
+        dirname = "{}.{:03}".format(base, suffix)
+
+    return dirname
+
+
+def copy(fin, fout, len):
+    chunk_size = CHUNK_SIZE
+    while len > 0:
+        if len < chunk_size:
+            chunk_size = len
+        chunk = fin.read(chunk_size)
+        if not chunk:
+            raise Exception("Read error with chunk_size={} len={}".format(chunk_size, len))
+        fout.write(chunk)
+        len -= chunk_size
+
+
+def extract_section(f, section, out_filename):
+    f.seek(section.start)
+    with open(out_filename, "wb") as fout:
+        copy(f, fout, section.len)
+
+
+def extract(filename, output_dir, include_empty, section_count, mtd_part_count=None):
+    header = read_header(filename, section_count, mtd_part_count)
+
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+
+    if not os.path.exists(output_dir) or not os.path.isdir(output_dir):
+        raise Exception("Invalid output directory: {}".format(output_dir))
+
+    with open(filename, "rb") as f:
+        for section in header.sections:
+            out_filename = os.path.join(output_dir, make_section_filename(section))
+            if section.len or include_empty:
+                print("Extracting section {} ({} bytes) into {}".format(section.num, section.len, out_filename))
+                extract_section(f, section, out_filename)
+            else:
+                print("Skipping empty section {}".format(section.num))
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description='swanntool (by Vincent Mallet 2021)')
 
@@ -189,16 +248,22 @@ def parse_args():
                         help='List contents of PAK firmware file (default)')
     pgroup.add_argument('-r', '--replace', dest='replace', action='store_true',
                         help='Replace a section into a new PAK file')
+    pgroup.add_argument('-e', '--extract', dest='extract', action='store_true',
+                        help='Extract sections to a directory')
     parser.add_argument('-o', '--output', dest='output_pak', help='Name of the output PAK file')
+    parser.add_argument('-d', '--output-dir', dest='output_dir',
+                        help='Name of output directory when extracting sections')
     parser.add_argument('-c', '--section-count', dest='section_count', type=int, default=SECTION_COUNT,
                         help='Number of sections in source PAK file (default {})'.format(SECTION_COUNT))
+    parser.add_argument('--empty', dest='include_empty', action='store_true',
+                        help='Include empty sections when extracting')
     parser.add_argument('filename', nargs=1, help='Name of PAK firmware file')
 
     args = parser.parse_args()
     print("args: {}".format(args))
 
     # Set default action as "list"
-    if not (args.list or args.replace):
+    if not (args.list or args.replace or args.extract):
         args.list = True
 
     return args
@@ -212,6 +277,10 @@ def main():
         header = read_header(filename, args.section_count)
         header.print_debug()
         check_crc(filename, args.section_count)
+    elif args.extract:
+        output_dir = args.output_dir or make_output_dir_name(filename)
+        print("output: {}".format(output_dir))
+        extract(filename, output_dir, args.include_empty, args.section_count)
     elif args.replace:
         pass
 
