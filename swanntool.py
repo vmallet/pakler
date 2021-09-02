@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""Simple tool to manipulate PAK firmware files (list, extract, replace) for Swann and Reolink devices. See -h."""
+
 import argparse
 import itertools
 import os.path
@@ -43,13 +45,15 @@ HEADER_HEADER_SIZE = struct.calcsize(HEADER_FORMAT)  # Size of the header's head
 
 
 def calc_header_size(section_count, mtd_part_count=None):
+    """Return the calculated size of the header given a number of sections (and optionally of mtd_parts)."""
     if not mtd_part_count:
         mtd_part_count = section_count
 
     return struct.calcsize(HEADER_FORMAT) + (section_count * SECTION_SIZE) + (mtd_part_count * MTD_PART_SIZE)
 
 
-def fix_strings(obj, fields):
+def decode_strings(obj, fields):
+    """Decode (utf-8) 0-padded binary strings in the obj's fields to normal strings."""
     for field in fields:
         cstr = getattr(obj, field)
         fixed = cstr.rstrip(b'\0').decode('utf-8')
@@ -57,10 +61,13 @@ def fix_strings(obj, fields):
 
 
 def quote_string(string):
+    """Return the string surrounded with double-quotes."""
     return '"{}"'.format(string)
 
 
 class Section(object):
+    """A header's 'section'"""
+
     def __init__(self, buf, num):
         self.num = num
         self.name = None
@@ -72,7 +79,7 @@ class Section(object):
         for key, val in fields.items():
             setattr(self, key, val)
 
-        fix_strings(self, SECTION_STRINGS)
+        decode_strings(self, SECTION_STRINGS)
 
     def __repr__(self):
         return 'Section {:2} name={:16} version={:16} start={:08x}  len={:08x}  (start={:8} len={:8})'.format(
@@ -88,6 +95,8 @@ class Section(object):
 
 
 class MtdPart(object):
+    """A header's 'Mtd_Part'"""
+
     def __init__(self, buf):
         self.name = None
         self.a = 0
@@ -99,7 +108,7 @@ class MtdPart(object):
         for key, val in fields.items():
             setattr(self, key, val)
 
-        fix_strings(self, MTD_PART_STRINGS)
+        decode_strings(self, MTD_PART_STRINGS)
 
     def __repr__(self):
         return 'Mtd_part name={:16} mtd={:16}  a={:08x}  start={:08x}  len={:08x}'.format(
@@ -115,6 +124,8 @@ class MtdPart(object):
 
 
 class Header(object):
+    """PAK file header"""
+
     def __init__(self, buf, section_count, mtd_part_count):
         self.magic = 0
         self.crc32 = 0
@@ -175,12 +186,14 @@ class Header(object):
         return buf
 
 
-def usage(argv, exitcode):
-    print("usage: {} imagename".format(argv[0]))
-    exit(exitcode)
-
-
 def read_header(filename, section_count, mtd_part_count=None):
+    """Read and parse the header of a PAK firmware file.
+
+    :param filename: name of the PAK firmware file
+    :param section_count: number of sections present in the header
+    :param mtd_part_count: optional number of mtd_parts, defaults to section_count
+    :return: the parsed Header object
+    """
     if not mtd_part_count:
         mtd_part_count = section_count
 
@@ -191,12 +204,11 @@ def read_header(filename, section_count, mtd_part_count=None):
         if len(buf) != header_size:
             raise Exception("Header size error, expected: {}, got: {}".format(header_size, len(buf)))
 
-        header = Header(buf, section_count, mtd_part_count)
-
-    return header
+    return Header(buf, section_count, mtd_part_count)
 
 
 def calc_crc(filename, section_count):
+    """Calculate the PAK file's CRC (which should match the header's CRC)"""
     header_size = calc_header_size(section_count)
     crc = 0xffffffff
     with open(filename, "rb") as f:
@@ -217,16 +229,23 @@ def calc_crc(filename, section_count):
 
 
 def check_crc(filename, section_count, mtd_part_count=None):
+    """Check the PAK file's crc matches the crc in its header."""
     header = read_header(filename, section_count, mtd_part_count)
     crc = calc_crc(filename, section_count)
 
     if crc != header.crc32:
         print("CRC MISMATCH, file: {}, header.crc={:08x}, got={:08x}".format(filename, header.crc32, crc))
-    else:
-        print("File passes CRC check: {}".format(filename))
+        return False
+
+    print("File passes CRC check: {}".format(filename))
+    return True
 
 
 def update_crc(filename, section_count):
+    """Recompute the PAK file's crc and store it in its header.
+
+    Note: the PAK file is modified by this operation.
+    """
     crc = calc_crc(filename, section_count)
 
     with open(filename, "r+b") as f:
@@ -282,6 +301,7 @@ def extract_section(f, section, out_filename):
 
 
 def extract(filename, output_dir, include_empty, section_count, mtd_part_count=None):
+    """Extract all sections from the given PAK file into individual files."""
     header = read_header(filename, section_count, mtd_part_count)
 
     if not os.path.exists(output_dir):
@@ -301,6 +321,15 @@ def extract(filename, output_dir, include_empty, section_count, mtd_part_count=N
 
 
 def replace_section(filename, section_file, section_num, output_file, section_count, mtd_part_count=None):
+    """Copy the given PAK file into new output_file, replacing the specified section
+
+    :param filename: name of the input PAK firmware file
+    :param section_file: name of the file containing the section to be swapped-in
+    :param section_num: number of the section to be replaced
+    :param output_file: name of the output file which will contained the modified PAK file
+    :param section_count: number of sections in the input PAK file
+    :param mtd_part_count:  optional number of mtd_parts in the input PAK file
+    """
     header = read_header(filename, section_count, mtd_part_count)
     new_header = read_header(filename, section_count, mtd_part_count)
 
@@ -326,7 +355,7 @@ def replace_section(filename, section_file, section_num, output_file, section_co
             new_header.sections[section.num].start = fout.tell()  # TODO: set up a check in Header.init() to validate sections[num].num==num
             if section.num == section_num:
                 new_header.sections[section.num].len = section_len
-                print("Replacing section {} ({} bytes)".format(section.num, section_len))
+                print("Replacing section {} ({} bytes) with {} bytes".format(section.num, section.len, section_len))
                 copy(fsection, fout, section_len)
             else:
                 print("Copying section {} ({} bytes)".format(section.num, section.len))
@@ -383,7 +412,7 @@ class EpilogizerHelpFormatter(argparse.HelpFormatter):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='swanntool (by Vincent Mallet 2021) - manipulate Swann / Reolink / Novatek PAK firmware files',
+        description='swanntool (by Vincent Mallet 2021) - manipulate Swann / Reolink PAK firmware files',
         formatter_class=EpilogizerHelpFormatter,
         epilog=EPILOG_MARKER)
 
@@ -417,7 +446,7 @@ def parse_args():
 
 def guess_section_count(filename) -> Optional[int]:
     """
-    Attempt to guess the number of sections for given firmware file.
+    Attempt to guess the number of sections for the given PAK firmware file.
 
     :return: Guessed number of sections, or None if it couldn't be guessed
     """
@@ -426,7 +455,7 @@ def guess_section_count(filename) -> Optional[int]:
         try:
             read_header(filename, i)
             return i
-        except:  # Broad except: the goal is to blindly try to parse the header, ignoring ALL errors
+        except Exception:  # Broad clause: the goal is to blindly try to parse the header, ignoring ALL errors
             pass
 
     return None
