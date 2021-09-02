@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
 import argparse
+import itertools
 import os.path
 import struct
 import textwrap
 import zlib
+from typing import Optional
 
 EPILOG_MARKER = "##MYEPILOG##"
 
@@ -397,8 +399,9 @@ def parse_args():
     parser.add_argument('-o', '--output', dest='output_pak', help='Name of output PAK file when replacing a section')
     parser.add_argument('-d', '--output-dir', dest='output_dir',
                         help='Name of output directory when extracting sections')
-    parser.add_argument('-c', '--section-count', dest='section_count', type=int, default=SECTION_COUNT,
-                        help='Number of sections in source PAK file (default {})'.format(SECTION_COUNT))
+    parser.add_argument('-c', '--section-count', dest='section_count', type=int, default=None,
+                        help='Number of sections in source PAK file (will try to guess if not specified, or fallback'
+                             'to default of {})'.format(SECTION_COUNT))
     parser.add_argument('--empty', dest='include_empty', action='store_true',
                         help='Include empty sections when extracting')
     parser.add_argument('filename', nargs=1, help='Name of PAK firmware file')
@@ -412,26 +415,53 @@ def parse_args():
     return args
 
 
+def guess_section_count(filename) -> Optional[int]:
+    """
+    Attempt to guess the number of sections for given firmware file.
+
+    :return: Guessed number of sections, or None if it couldn't be guessed
+    """
+    # Attempt all counts between 1 and 30 starting with the most probable first
+    for i in itertools.chain(range(8, 14), range(1, 8), range(14, 30)):
+        try:
+            read_header(filename, i)
+            return i
+        except:  # Broad except: the goal is to blindly try to parse the header, ignoring ALL errors
+            pass
+
+    return None
+
+
 def main():
     args = parse_args()
     filename = args.filename[0]
 
+    section_count = args.section_count
+    if not section_count:
+        print("Attempting to guess number of sections... ", end='')
+        section_count = guess_section_count(filename)
+        if section_count:
+            print("guessed: {}".format(section_count))
+        else:
+            print("failed to guess, using default of {}".format(SECTION_COUNT))
+            section_count = SECTION_COUNT
+
     if args.list:
-        header = read_header(filename, args.section_count)
+        header = read_header(filename, section_count)
         header.print_debug()
-        check_crc(filename, args.section_count)
+        check_crc(filename, section_count)
 
     elif args.extract:
         output_dir = args.output_dir or make_output_dir_name(filename)
         print("output: {}".format(output_dir))
-        extract(filename, output_dir, args.include_empty, args.section_count)
+        extract(filename, output_dir, args.include_empty, section_count)
 
     elif args.replace:
         if not args.section_file or not args.section_num:
             raise Exception("replace error: need both section binary file and section number to do a replacement;"
                             " see help")
         output_file = args.output_pak or make_output_file_name(filename)
-        replace_section(filename, args.section_file, args.section_num, output_file, args.section_count)
+        replace_section(filename, args.section_file, args.section_num, output_file, section_count)
 
 
 if __name__ == "__main__":
