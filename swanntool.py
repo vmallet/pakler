@@ -3,7 +3,10 @@
 import argparse
 import os.path
 import struct
+import textwrap
 import zlib
+
+EPILOG_MARKER = "##MYEPILOG##"
 
 CHUNK_SIZE = 128 * 1024
 
@@ -339,8 +342,48 @@ def replace_section(filename, section_file, section_num, output_file, section_co
     replaced_header.print_debug()
 
 
+def make_epilogue_text(prog, indent, width):
+    lines = [
+        '{} ~/fw/CAM_FW.PAK'.format(prog),
+        'List the content of CAM_FW.PAK with the default number of sections (10)',
+        '',
+        '{} ~/fw/CAM_FW.PAK -c 9'.format(prog),
+        'List the content of CAM_FW.PAK knowing it has 9 sections',
+        '',
+        '{} ~/fw/CAM_FW.PAK -e -c 9 -d /tmp/extracted/'.format(prog),
+        'Extract all sections of CAM_FW.PAK into /tmp/extracted, knowing it has 9 sections',
+        '',
+        '{} ~/fw/CAM_FW.PAK -r -c 9 -n 4 -f ~/fw/new_fs.cramfs -o ~/fw/CAM_FW_PATCHED.PAK'.format(prog),
+        'From firwmware file ~/fw/CAM_FW.PAK, replace the 4th section with new file ~/fw/new_fs.cramfs, writing'
+        ' the output into ~/fw/CAM_FW_PATCHED.PAK, knowing the firmware has 9 sections'
+    ]
+
+    wrapper = textwrap.TextWrapper(width, initial_indent=indent, subsequent_indent=indent)
+
+    return "\n".join(["examples:"] + [wrapper.fill(line) for line in lines])
+
+
+class EpilogizerHelpFormatter(argparse.HelpFormatter):
+    """
+    Help message formatter which injects a pre-formatted epilog text if the text to be formatted is the EPILOG_MARKER.
+    """
+
+    def __init__(self, prog, indent_increment=2, max_help_position=24, width=None) -> None:
+        super().__init__(prog, indent_increment, max_help_position, width)
+        self._my_prog = prog
+        self._my_indent = ' ' * indent_increment
+
+    def _fill_text(self, text, width, indent):
+        if text == EPILOG_MARKER:
+            return make_epilogue_text(self._my_prog, self._my_indent, width)
+        return super()._fill_text(text, width, indent)
+
+
 def parse_args():
-    parser = argparse.ArgumentParser(description='swanntool (by Vincent Mallet 2021)')
+    parser = argparse.ArgumentParser(
+        description='swanntool (by Vincent Mallet 2021) - manipulate Swann / Reolink / Novatek PAK firmware files',
+        formatter_class=EpilogizerHelpFormatter,
+        epilog=EPILOG_MARKER)
 
     pgroup = parser.add_mutually_exclusive_group()
     pgroup.add_argument('-l', '--list', dest='list', action='store_true',
@@ -351,7 +394,7 @@ def parse_args():
                         help='Extract sections to a directory')
     parser.add_argument('-f', '--section-file', dest='section_file', help='Input binary file for section replacement')
     parser.add_argument('-n', '--section-num', dest='section_num', type=int, help='Section number of replaced section')
-    parser.add_argument('-o', '--output', dest='output_pak', help='Name of the output PAK file')
+    parser.add_argument('-o', '--output', dest='output_pak', help='Name of output PAK file when replacing a section')
     parser.add_argument('-d', '--output-dir', dest='output_dir',
                         help='Name of output directory when extracting sections')
     parser.add_argument('-c', '--section-count', dest='section_count', type=int, default=SECTION_COUNT,
@@ -361,7 +404,6 @@ def parse_args():
     parser.add_argument('filename', nargs=1, help='Name of PAK firmware file')
 
     args = parser.parse_args()
-    print("args: {}".format(args))
 
     # Set default action as "list"
     if not (args.list or args.replace or args.extract):
