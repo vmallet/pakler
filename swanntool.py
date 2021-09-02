@@ -56,8 +56,8 @@ def fix_strings(obj, fields):
         setattr(obj, field, fixed)
 
 
-def quote_string(string, min_length):
-    return "{0:{1}s}".format('"{}"'.format(string), min_length)
+def quote_string(string):
+    return '"{}"'.format(string)
 
 
 class Section(object):
@@ -75,8 +75,8 @@ class Section(object):
         fix_strings(self, SECTION_STRINGS)
 
     def __repr__(self):
-        return 'Section name={} version={} start={:08x}  len={:08x}  (start={:8} len={:8})'.format(
-            quote_string(self.name, 16), quote_string(self.version, 16), self.start, self.len, self.start, self.len)
+        return 'Section {:2} name={:16} version={:16} start={:08x}  len={:08x}  (start={:8} len={:8})'.format(
+            self.num, quote_string(self.name), quote_string(self.version), self.start, self.len, self.start, self.len)
 
     def __iter__(self):
         for key in dir(self):
@@ -102,8 +102,8 @@ class MtdPart(object):
         fix_strings(self, MTD_PART_STRINGS)
 
     def __repr__(self):
-        return 'Mtd_part name={} mtd={}  a={:08x}  start={:08x}  len={:08x}'.format(
-            quote_string(self.name, 16), quote_string(self.mtd, 16), self.a, self.start, self.len)
+        return 'Mtd_part name={:16} mtd={:16}  a={:08x}  start={:08x}  len={:08x}'.format(
+            quote_string(self.name), quote_string(self.mtd), self.a, self.start, self.len)
 
     def __iter__(self):
         for key in dir(self):
