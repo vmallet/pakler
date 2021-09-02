@@ -10,12 +10,12 @@ CHUNK_SIZE = 128 * 1024
 SWANN_MAGIC = 0x32725913
 
 SECTION_FORMAT = "<32s24sII"
-SECTION_FIELDS = ['name', #TODO: Docs
+SECTION_FIELDS = ['name',  # TODO: Docs
                   'version',
                   'start',
                   'len']
 SECTION_STRINGS = ['name', 'version']
-SECTION_SIZE = struct.calcsize(SECTION_FORMAT) # 64
+SECTION_SIZE = struct.calcsize(SECTION_FORMAT)  # 64
 SECTION_COUNT = 10
 
 MTD_PART_FORMAT = "<32sI32sII"
@@ -37,18 +37,18 @@ HEADER_CRC_OFFSET = 4  # Offset of the CRC in the file
 HEADER_HEADER_SIZE = struct.calcsize(HEADER_FORMAT)  # Size of the header's header (first 12 bytes)
 
 
-def calc_header_size(section_count, mtd_part_count = None):
+def calc_header_size(section_count, mtd_part_count=None):
     if not mtd_part_count:
         mtd_part_count = section_count
 
     return struct.calcsize(HEADER_FORMAT) + (section_count * SECTION_SIZE) + (mtd_part_count * MTD_PART_SIZE)
 
 
-def fix_strings(object, fields):
+def fix_strings(obj, fields):
     for field in fields:
-        cstr = getattr(object, field)
+        cstr = getattr(obj, field)
         fixed = cstr.rstrip(b'\0').decode('utf-8')
-        setattr(object, field, fixed)
+        setattr(obj, field, fixed)
 
 
 def quote_string(string, min_length):
@@ -63,9 +63,9 @@ class Section(object):
         self.start = 0
         self.len = 0
 
-        fields = dict(list(zip(SECTION_FIELDS, struct.unpack(SECTION_FORMAT,buf))))
-        for key in fields:
-            setattr(self, key, fields[key])
+        fields = dict(zip(SECTION_FIELDS, struct.unpack(SECTION_FORMAT, buf)))
+        for key, val in fields.items():
+            setattr(self, key, val)
 
         fix_strings(self, SECTION_STRINGS)
 
@@ -90,9 +90,9 @@ class MtdPart(object):
         self.start = 0
         self.len = 0
 
-        fields = dict(list(zip(MTD_PART_FIELDS, struct.unpack(MTD_PART_FORMAT,buf))))
-        for key in fields:
-            setattr(self, key, fields[key])
+        fields = dict(zip(MTD_PART_FIELDS, struct.unpack(MTD_PART_FORMAT, buf)))
+        for key, val in fields.items():
+            setattr(self, key, val)
 
         fix_strings(self, MTD_PART_STRINGS)
 
@@ -121,17 +121,17 @@ class Header(object):
         if len(buf) != self.size:
             raise Exception("Invalid header buffer size, expected: {}, got: {}".format(self.size, len(buf)))
 
-        fields = dict(list(zip(HEADER_FIELDS, struct.unpack(HEADER_FORMAT, buf[0:HEADER_HEADER_SIZE]))))
-        for key in fields:
-            setattr(self, key, fields[key])
+        fields = dict(zip(HEADER_FIELDS, struct.unpack(HEADER_FORMAT, buf[:HEADER_HEADER_SIZE])))
+        for key, val in fields.items():
+            setattr(self, key, val)
 
         buf = buf[HEADER_HEADER_SIZE:]
-        for num in range(0, section_count):
-            self.sections.append(Section(buf[0:SECTION_SIZE], num))
+        for num in range(section_count):
+            self.sections.append(Section(buf[:SECTION_SIZE], num))
             buf = buf[SECTION_SIZE:]
 
-        for num in range(0, mtd_part_count):
-            self.mtd_parts.append(MtdPart(buf[0:MTD_PART_SIZE]))
+        for num in range(mtd_part_count):
+            self.mtd_parts.append(MtdPart(buf[:MTD_PART_SIZE]))
             buf = buf[MTD_PART_SIZE:]
 
         self._check_errors(buf[:-4])
@@ -175,7 +175,7 @@ def usage(argv, exitcode):
     exit(exitcode)
 
 
-def read_header(filename, section_count, mtd_part_count = None):
+def read_header(filename, section_count, mtd_part_count=None):
     if not mtd_part_count:
         mtd_part_count = section_count
 
@@ -200,7 +200,7 @@ def calc_crc(filename, section_count):
         for chunk in iter(lambda: f.read(CHUNK_SIZE), b''):
             crc = zlib.crc32(chunk, crc)
 
-        buf = b'\2\0\0\0' # TODO explain...
+        buf = b'\2\0\0\0'  # TODO explain...
         crc = zlib.crc32(buf, crc)
 
         f.seek(HEADER_HEADER_SIZE)
@@ -211,7 +211,7 @@ def calc_crc(filename, section_count):
     return crc
 
 
-def check_crc(filename, section_count, mtd_part_count = None):
+def check_crc(filename, section_count, mtd_part_count=None):
     header = read_header(filename, section_count, mtd_part_count)
     crc = calc_crc(filename, section_count)
 
@@ -230,7 +230,7 @@ def update_crc(filename, section_count):
 
 
 def make_section_filename(section):
-    #TODO: should sanitize section name before turning it into a filename
+    # TODO: should sanitize section name before turning it into a filename
     if section.name:
         return "{:02}_{}.bin".format(section.num, section.name)
     return "{:02}.bin".format(section.num)
@@ -258,16 +258,16 @@ def make_output_dir_name(filename):
     return find_new_name(base)
 
 
-def copy(fin, fout, len):
+def copy(fin, fout, length):
     chunk_size = CHUNK_SIZE
-    while len > 0:
-        if len < chunk_size:
-            chunk_size = len
+    while length > 0:
+        if length < chunk_size:
+            chunk_size = length
         chunk = fin.read(chunk_size)
         if not chunk:
-            raise Exception("Read error with chunk_size={} len={}".format(chunk_size, len))
+            raise Exception("Read error with chunk_size={} length={}".format(chunk_size, length))
         fout.write(chunk)
-        len -= chunk_size
+        length -= chunk_size
 
 
 def extract_section(f, section, out_filename):
@@ -318,7 +318,7 @@ def replace_section(filename, section_file, section_num, output_file, section_co
 
         for section in header.sections:
             f.seek(section.start)
-            new_header.sections[section.num].start = fout.tell() #TODO: set up a check in Header.init() to validate sections[num].num==num
+            new_header.sections[section.num].start = fout.tell()  # TODO: set up a check in Header.init() to validate sections[num].num==num
             if section.num == section_num:
                 new_header.sections[section.num].len = section_len
                 print("Replacing section {} ({} bytes)".format(section.num, section_len))
@@ -378,17 +378,18 @@ def main():
         header = read_header(filename, args.section_count)
         header.print_debug()
         check_crc(filename, args.section_count)
+
     elif args.extract:
         output_dir = args.output_dir or make_output_dir_name(filename)
         print("output: {}".format(output_dir))
         extract(filename, output_dir, args.include_empty, args.section_count)
+
     elif args.replace:
         if not args.section_file or not args.section_num:
             raise Exception("replace error: need both section binary file and section number to do a replacement;"
                             " see help")
         output_file = args.output_pak or make_output_file_name(filename)
         replace_section(filename, args.section_file, args.section_num, output_file, args.section_count)
-        pass
 
 
 if __name__ == "__main__":
