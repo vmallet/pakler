@@ -1,35 +1,48 @@
-# pakfwtool
+# pakler
 
-Pakfwtool is a command-line tool used to manipulate `.pak` firmware files
+Pakler is a command-line tool used to manipulate `.pak` firmware files
 used by Swann and Reolink devices. You can list, extract, and replace their
 content. It makes it easy to explore and patch firmwares used by various
 NVRs, DVRs and IP cameras.
 
+## Installing
 
-## Installing / Getting Started
+Note: pakler requires Python 3
 
-Stuff to install and get started
+### Recommended
+
+```shell
+pip install pakler
+```
+
+### Manual
+
+```shell
+git clone https://github.com/vmallet/pakler
+cd pakler
+pip install .
+```
 
 ## Usage
 
 The main commands are:
- * get help: `pakfwtool -h`
- * [list content](#viewing-content-of-pak-files): `pakfwtool file.pak` (or `pakfwtool -l file.pak`)
- * [extract content](#extracting-content-of-pak-files): `pakfwtool file.pak -e -d <directory>`
- * [replace content](#replacing-content-of-pak-files): `pakfwtool file.pak -r -n ... -f ... -o newfile.pak`
+ * get help: `pakler -h`
+ * [list content](#viewing-content-of-pak-files): `pakler file.pak` (or `pakler -l file.pak`)
+ * [extract content](#extracting-content-of-pak-files): `pakler file.pak -e -d <directory>`
+ * [replace content](#replacing-content-of-pak-files): `pakler file.pak -r -n ... -f ... -o newfile.pak`
 
 Help can be had with:
 ```shell
-pakfwtool -h
+pakler -h
 ```
 
 ### Viewing content of `.pak` files
 
 Listing the contents of a `.pak` file is pretty straightforward: invoke the
-tool with the name of the file on the command line.
+tool with the name of the firmware file on the command line.
 
 ```shell
-pakfwtool.py NVR8-7400_1705_3438_1103.pak
+pakler NVR8-7400_1705_3438_1103.pak
 ```
 
 ```
@@ -67,7 +80,7 @@ the `.pak` file.
 
 example:
 ```shell
-pakfwtool ./NT98312_NVR_8IP_REOLINK_L300_130_21060706.pak -e -d newdir
+pakler ./NT98312_NVR_8IP_REOLINK_L300_130_21060706.pak -e -d newdir
 ```
 ```
 Attempting to guess number of sections... guessed: 11
@@ -97,7 +110,7 @@ Here is an example where we replace the `.pak` file's section #3 with the
 file ""
 
 ```shell
-pakfwtool.py NT98312_NVR_8IP_REOLINK_L300_130_21060706.pak -r -n 5 -f patched_fs.bin -o patched_fw.pak
+pakler NT98312_NVR_8IP_REOLINK_L300_130_21060706.pak -r -n 5 -f patched_fs.bin -o patched_fw.pak
 ````
 
 ```
@@ -148,10 +161,9 @@ Header  magic=32725913  crc32=41ee801c  type=00006202  sections=<11>  mtd_parts=
 
 ## Naming
 
-Pakfwtool is a mouthful and I don't quite know how to even pronounce it.. but
-'paktool' was already used by many projects and I wanted to stick with something
-short. Suggestions are welcome :)
+Why pakler? Take a **pak** and **L**ist it, **E**xtract it, or **R**eplace 
+parts of it... pakler? Makes sense! (Naming suggestions are welcome :) )
 
 ## Licensing
 
-Pakfwtool is licensed under MIT license. See [LICENSE](LICENSE)
+pakler is licensed under MIT license. See [LICENSE](LICENSE)

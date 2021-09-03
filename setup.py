@@ -16,7 +16,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url='https://github.com/vmallet/pakler',
-    py_modules = ['swanntool', '_version'],
+    py_modules=['pakler', '_version'],
     packages=find_packages(),
     install_requires=[],
     python_requires='>=3.6',
@@ -25,8 +25,8 @@ setup(
         "Programming Language :: Python :: 3.6",
         "Operating System :: OS Independent",
     ],
-    entry_points = '''
+    entry_points='''
         [console_scripts]
-        pakler=swanntool:main
+        pakler=pakler:main
         '''
 )

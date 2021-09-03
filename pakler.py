@@ -19,7 +19,7 @@ EPILOG_MARKER = "##MYEPILOG##"
 
 CHUNK_SIZE = 128 * 1024
 
-SWANN_MAGIC = 0x32725913
+PAK_MAGIC = 0x32725913
 
 SECTION_FORMAT = "<32s24sII"
 SECTION_FIELDS = ['name',  # TODO: Docs
@@ -167,8 +167,8 @@ class Header(object):
                 yield key, getattr(self, key)
 
     def _check_errors(self, buf_crc):
-        if self.magic != SWANN_MAGIC:
-            raise Exception("Wrong header magic: expected {:08x}, got {:08x}".format(SWANN_MAGIC, self.magic))
+        if self.magic != PAK_MAGIC:
+            raise Exception("Wrong header magic: expected {:08x}, got {:08x}".format(PAK_MAGIC, self.magic))
 
     def print_debug(self):
         print(self)
@@ -417,7 +417,7 @@ class EpilogizerHelpFormatter(argparse.HelpFormatter):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='swanntool {} (by Vincent Mallet 2021) - manipulate Swann / Reolink PAK firmware files'.format(
+        description='pakler {} (by Vincent Mallet 2021) - manipulate Swann / Reolink PAK firmware files'.format(
             version),
         formatter_class=EpilogizerHelpFormatter,
         epilog=EPILOG_MARKER)

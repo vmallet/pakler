@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/swanntool.iml" filepath="$PROJECT_DIR$/swanntool.iml" />
+      <module fileurl="file://$PROJECT_DIR$/pakler.iml" filepath="$PROJECT_DIR$/pakler.iml" />
     </modules>
   </component>
 </project>
