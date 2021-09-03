@@ -10,6 +10,11 @@ import textwrap
 import zlib
 from typing import Optional
 
+try:
+    from _version import version
+except ModuleNotFoundError:
+    version = 'dev-local'
+
 EPILOG_MARKER = "##MYEPILOG##"
 
 CHUNK_SIZE = 128 * 1024
@@ -412,7 +417,8 @@ class EpilogizerHelpFormatter(argparse.HelpFormatter):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='swanntool (by Vincent Mallet 2021) - manipulate Swann / Reolink PAK firmware files',
+        description='swanntool {} (by Vincent Mallet 2021) - manipulate Swann / Reolink PAK firmware files'.format(
+            version),
         formatter_class=EpilogizerHelpFormatter,
         epilog=EPILOG_MARKER)
 
