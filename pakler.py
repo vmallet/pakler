@@ -417,10 +417,12 @@ class EpilogizerHelpFormatter(argparse.HelpFormatter):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='pakler {} (by Vincent Mallet 2021) - manipulate Swann / Reolink PAK firmware files'.format(
+        description='%(prog)s {} (by Vincent Mallet 2021) - manipulate Swann / Reolink PAK firmware files'.format(
             version),
         formatter_class=EpilogizerHelpFormatter,
         epilog=EPILOG_MARKER)
+
+    parser.add_argument('-v', '--version', action='version', version="%(prog)s {}".format(version))
 
     pgroup = parser.add_mutually_exclusive_group()
     pgroup.add_argument('-l', '--list', dest='list', action='store_true',
