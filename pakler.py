@@ -380,18 +380,15 @@ def replace_section(filename, section_file, section_num, output_file, section_co
 
 def make_epilogue_text(prog, indent, width):
     lines = [
-        '{} ~/fw/CAM_FW.PAK'.format(prog),
-        'List the content of CAM_FW.PAK with the default number of sections (10)',
+        '{} ~/fw/CAM_FW.pak'.format(prog),
+        'List the content of CAM_FW.pak, auto-detecting the number of sections',
         '',
-        '{} ~/fw/CAM_FW.PAK -c 9'.format(prog),
-        'List the content of CAM_FW.PAK knowing it has 9 sections',
+        '{} ~/fw/CAM_FW.pak -e -d /tmp/extracted/'.format(prog),
+        'Extract all sections of CAM_FW.pak into /tmp/extracted',
         '',
-        '{} ~/fw/CAM_FW.PAK -e -c 9 -d /tmp/extracted/'.format(prog),
-        'Extract all sections of CAM_FW.PAK into /tmp/extracted, knowing it has 9 sections',
-        '',
-        '{} ~/fw/CAM_FW.PAK -r -c 9 -n 4 -f ~/fw/new_fs.cramfs -o ~/fw/CAM_FW_PATCHED.PAK'.format(prog),
-        'From firwmware file ~/fw/CAM_FW.PAK, replace the 4th section with new file ~/fw/new_fs.cramfs, writing'
-        ' the output into ~/fw/CAM_FW_PATCHED.PAK, knowing the firmware has 9 sections'
+        '{} ~/fw/CAM_FW.pak -r -n 4 -f ~/fw/new_fs.cramfs -o ~/fw/CAM_FW_PATCHED.pak'.format(prog),
+        'From firmware file ~/fw/CAM_FW.pak, replace the 4th section with new file ~/fw/new_fs.cramfs, writing'
+        ' the output to ~/fw/CAM_FW_PATCHED.pak'
     ]
 
     wrapper = textwrap.TextWrapper(width, initial_indent=indent, subsequent_indent=indent)
@@ -438,7 +435,7 @@ def parse_args():
                         help='Name of output directory when extracting sections')
     parser.add_argument('-c', '--section-count', dest='section_count', type=int, default=None,
                         help='Number of sections in source PAK file (will try to guess if not specified, or fallback'
-                             'to default of {})'.format(SECTION_COUNT))
+                             ' to default of {})'.format(SECTION_COUNT))
     parser.add_argument('--empty', dest='include_empty', action='store_true',
                         help='Include empty sections when extracting')
     parser.add_argument('filename', nargs=1, help='Name of PAK firmware file')
