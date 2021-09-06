@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# SPDX-FileCopyrightText: 2021 Vincent Mallet <vmallet@gmail.com>
+# SPDX-License-Identifier: MIT
+
 """Simple tool to manipulate PAK firmware files (list, extract, replace) for Swann and Reolink devices. See -h."""
 
 import argparse
