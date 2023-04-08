@@ -458,14 +458,14 @@ def guess_section_count(filename) -> Optional[int]:
 
     :return: Guessed number of sections, or None if it couldn't be guessed
     """
-    # Attempt all counts between 1 and 30 starting with the most probable first
-    for i in itertools.chain(range(8, 14), range(1, 8), range(14, 30)):
-        try:
-            read_header(filename, i)
-            return i
-        except Exception:  # Broad clause: the goal is to blindly try to parse the header, ignoring ALL errors
-            pass
-
+    with open(filename, "rb") as f:
+        f.seek(HEADER_HEADER_SIZE)
+        first_section = Section(f.read(SECTION_SIZE), 0)
+        first_section_name = first_section.name.encode("utf-8")
+        for count in range(30):
+            data = f.read(SECTION_SIZE)
+            if data.startswith(first_section_name):
+                return count + 1
     return None
 
 
