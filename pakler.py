@@ -6,7 +6,6 @@
 """Simple tool to manipulate PAK firmware files (list, extract, replace) for Swann and Reolink devices. See -h."""
 
 import argparse
-import itertools
 import os.path
 import struct
 import textwrap
@@ -25,12 +24,14 @@ CHUNK_SIZE = 128 * 1024
 PAK_MAGIC = 0x32725913
 
 SECTION_FORMAT = "<32s24sII"
+SECTION_FORMAT_64 = "<32s24sQQ"
 SECTION_FIELDS = ['name',  # TODO: Docs
                   'version',
                   'start',
                   'len']
 SECTION_STRINGS = ['name', 'version']
 SECTION_SIZE = struct.calcsize(SECTION_FORMAT)  # 64
+SECTION_SIZE_64 = struct.calcsize(SECTION_FORMAT_64)  # 72
 SECTION_COUNT = 10
 
 MTD_PART_FORMAT = "<32sI32sII"
@@ -41,23 +42,28 @@ MTD_PART_FIELDS = ['name',
                    'len']
 MTD_PART_STRINGS = ['name',
                     'mtd']
-MTD_PART_SIZE = struct.calcsize(MTD_PART_FORMAT)
+MTD_PART_SIZE = struct.calcsize(MTD_PART_FORMAT)  # 76
 MTD_PART_COUNT = 10
 
 HEADER_FORMAT = "<III"
+HEADER_FORMAT_64 = "<QQQ"
 HEADER_FIELDS = ['magic',
                  'crc32',
                  'type']
 HEADER_CRC_OFFSET = 4  # Offset of the CRC in the file
+HEADER_CRC_OFFSET_64 = 8
 HEADER_HEADER_SIZE = struct.calcsize(HEADER_FORMAT)  # Size of the header's header (first 12 bytes)
+HEADER_HEADER_SIZE_64 = struct.calcsize(HEADER_FORMAT_64)  # First 24 bytes
 
 
-def calc_header_size(section_count, mtd_part_count=None):
+def calc_header_size(section_count, mtd_part_count=None, is64=False):
     """Return the calculated size of the header given a number of sections (and optionally of mtd_parts)."""
     if not mtd_part_count:
         mtd_part_count = section_count
 
-    return struct.calcsize(HEADER_FORMAT) + (section_count * SECTION_SIZE) + (mtd_part_count * MTD_PART_SIZE)
+    if is64:
+        return HEADER_HEADER_SIZE_64 + (section_count * SECTION_SIZE_64) + (mtd_part_count * MTD_PART_SIZE)
+    return HEADER_HEADER_SIZE + (section_count * SECTION_SIZE) + (mtd_part_count * MTD_PART_SIZE)
 
 
 def decode_strings(obj, fields):
@@ -76,14 +82,15 @@ def quote_string(string):
 class Section(object):
     """A header's 'section'"""
 
-    def __init__(self, buf, num):
+    def __init__(self, buf, num, is64=False):
         self.num = num
         self.name = None
         self.version = None
         self.start = 0
         self.len = 0
+        self.section_format = SECTION_FORMAT_64 if is64 else SECTION_FORMAT
 
-        fields = dict(zip(SECTION_FIELDS, struct.unpack(SECTION_FORMAT, buf)))
+        fields = dict(zip(SECTION_FIELDS, struct.unpack(self.section_format, buf)))
         for key, val in fields.items():
             setattr(self, key, val)
 
@@ -99,7 +106,7 @@ class Section(object):
                 yield key, getattr(self, key)
 
     def serialize(self):
-        return struct.pack(SECTION_FORMAT, self.name.encode(), self.version.encode(), self.start, self.len)
+        return struct.pack(self.section_format, self.name.encode(), self.version.encode(), self.start, self.len)
 
 
 class MtdPart(object):
@@ -134,25 +141,34 @@ class MtdPart(object):
 class Header(object):
     """PAK file header"""
 
-    def __init__(self, buf, section_count, mtd_part_count):
+    def __init__(self, buf, section_count, mtd_part_count, is64=False):
         self.magic = 0
         self.crc32 = 0
         self.type = 0
         self.sections = []
         self.mtd_parts = []
+        self.is64 = is64
+        if is64:
+            self.header_format = HEADER_FORMAT_64
+            header_header_size = HEADER_HEADER_SIZE_64
+            section_size = SECTION_SIZE_64
+        else:
+            self.header_format = HEADER_FORMAT
+            header_header_size = HEADER_HEADER_SIZE
+            section_size = SECTION_SIZE
 
-        self.size = calc_header_size(section_count, mtd_part_count)
+        self.size = calc_header_size(section_count, mtd_part_count, is64)
         if len(buf) != self.size:
             raise Exception("Invalid header buffer size, expected: {}, got: {}".format(self.size, len(buf)))
 
-        fields = dict(zip(HEADER_FIELDS, struct.unpack(HEADER_FORMAT, buf[:HEADER_HEADER_SIZE])))
+        fields = dict(zip(HEADER_FIELDS, struct.unpack(self.header_format, buf[:header_header_size])))
         for key, val in fields.items():
             setattr(self, key, val)
 
-        buf = buf[HEADER_HEADER_SIZE:]
+        buf = buf[header_header_size:]
         for num in range(section_count):
-            self.sections.append(Section(buf[:SECTION_SIZE], num))
-            buf = buf[SECTION_SIZE:]
+            self.sections.append(Section(buf[:section_size], num, is64))
+            buf = buf[section_size:]
 
         for num in range(mtd_part_count):
             self.mtd_parts.append(MtdPart(buf[:MTD_PART_SIZE]))
@@ -181,7 +197,7 @@ class Header(object):
             print("    {}".format(part))
 
     def serialize(self):
-        buf = struct.pack(HEADER_FORMAT, self.magic, self.crc32, self.type)
+        buf = struct.pack(self.header_format, self.magic, self.crc32, self.type)
         for section in self.sections:
             buf += section.serialize()
         for mtd_part in self.mtd_parts:
@@ -194,7 +210,7 @@ class Header(object):
         return buf
 
 
-def read_header(filename, section_count, mtd_part_count=None):
+def read_header(filename, section_count, mtd_part_count=None, is64=None):
     """Read and parse the header of a PAK firmware file.
 
     :param filename: name of the PAK firmware file
@@ -204,21 +220,27 @@ def read_header(filename, section_count, mtd_part_count=None):
     """
     if not mtd_part_count:
         mtd_part_count = section_count
+    if is64 is None:
+        is64 = is_64bit(filename)
 
-    header_size = calc_header_size(section_count, mtd_part_count)
+    header_size = calc_header_size(section_count, mtd_part_count, is64)
 
     with open(filename, "rb") as f:
         buf = f.read(header_size)
         if len(buf) != header_size:
             raise Exception("Header size error, expected: {}, got: {}".format(header_size, len(buf)))
 
-    return Header(buf, section_count, mtd_part_count)
+    return Header(buf, section_count, mtd_part_count, is64)
 
 
-def calc_crc(filename, section_count):
+def calc_crc(filename, section_count, is64=None):
     """Calculate the PAK file's CRC (which should match the header's CRC)"""
-    header_size = calc_header_size(section_count)
+    if is64 is None:
+        is64 = is_64bit(filename)
+    header_size = calc_header_size(section_count, is64=is64)
     crc = 0xffffffff
+    offset = HEADER_HEADER_SIZE_64 if is64 else HEADER_HEADER_SIZE
+    section_size = SECTION_SIZE_64 if is64 else SECTION_SIZE
     with open(filename, "rb") as f:
         f.seek(header_size)
 
@@ -228,18 +250,18 @@ def calc_crc(filename, section_count):
         buf = b'\2\0\0\0'  # TODO explain...
         crc = zlib.crc32(buf, crc)
 
-        f.seek(HEADER_HEADER_SIZE)
-        buf = f.read(section_count * SECTION_SIZE)
+        f.seek(offset)
+        buf = f.read(section_count * section_size)
         crc = zlib.crc32(buf, crc)
 
     crc = crc ^ 0xffffffff
     return crc
 
 
-def check_crc(filename, section_count, mtd_part_count=None):
+def check_crc(filename, section_count, mtd_part_count=None, is64=None):
     """Check the PAK file's crc matches the crc in its header."""
-    header = read_header(filename, section_count, mtd_part_count)
-    crc = calc_crc(filename, section_count)
+    header = read_header(filename, section_count, mtd_part_count, is64)
+    crc = calc_crc(filename, section_count, header.is64)
 
     if crc != header.crc32:
         print("CRC MISMATCH, file: {}, header.crc={:08x}, got={:08x}".format(filename, header.crc32, crc))
@@ -249,16 +271,20 @@ def check_crc(filename, section_count, mtd_part_count=None):
     return True
 
 
-def update_crc(filename, section_count):
+def update_crc(filename, section_count, is64=None):
     """Recompute the PAK file's crc and store it in its header.
 
     Note: the PAK file is modified by this operation.
     """
-    crc = calc_crc(filename, section_count)
+    if is64 is None:
+        is64 = is_64bit(filename)
+    crc = calc_crc(filename, section_count, is64)
+    offset = HEADER_CRC_OFFSET_64 if is64 else HEADER_CRC_OFFSET
+    fmt = "<Q" if is64 else "<I"
 
     with open(filename, "r+b") as f:
-        f.seek(HEADER_CRC_OFFSET)
-        f.write(struct.pack("<I", crc))
+        f.seek(offset)
+        f.write(struct.pack(fmt, crc))
 
 
 def make_section_filename(section):
@@ -339,7 +365,7 @@ def replace_section(filename, section_file, section_num, output_file, section_co
     :param mtd_part_count:  optional number of mtd_parts in the input PAK file
     """
     header = read_header(filename, section_count, mtd_part_count)
-    new_header = read_header(filename, section_count, mtd_part_count)
+    new_header = read_header(filename, section_count, mtd_part_count, header.is64)
 
     if not os.path.isfile(section_file):
         raise Exception("Section file doesn't exist or is not a file: {}".format(section_file))
@@ -374,7 +400,7 @@ def replace_section(filename, section_file, section_num, output_file, section_co
         fout.write(new_header.serialize())
 
     print("Updating CRC...")
-    update_crc(output_file, section_count)
+    update_crc(output_file, section_count, header.is64)
 
     print("Replacement completed. New header: ")
     replaced_header = read_header(output_file, section_count)
@@ -452,21 +478,41 @@ def parse_args():
     return args
 
 
-def guess_section_count(filename) -> Optional[int]:
+def guess_section_count(filename, is64=None) -> Optional[int]:
     """
     Attempt to guess the number of sections for the given PAK firmware file.
 
     :return: Guessed number of sections, or None if it couldn't be guessed
     """
+    if is64 is None:
+        is64 = is_64bit(filename)
+    offset = HEADER_HEADER_SIZE_64 if is64 else HEADER_HEADER_SIZE
+    section_size = SECTION_SIZE_64 if is64 else SECTION_SIZE
     with open(filename, "rb") as f:
-        f.seek(HEADER_HEADER_SIZE)
-        first_section = Section(f.read(SECTION_SIZE), 0)
+        f.seek(offset)
+        first_section = Section(f.read(section_size), 0, is64)
         first_section_name = first_section.name.encode("utf-8")
         for count in range(30):
-            data = f.read(SECTION_SIZE)
+            data = f.read(section_size)
             if data.startswith(first_section_name):
                 return count + 1
     return None
+
+
+def is_64bit(filename):
+    """Determine the firmware's target bitness.
+    
+    Firmwares for 64-bit devices have 8 bytes long header fields
+    instead of 4, with zero padding. That means the three "extra"
+    groups of bytes are all zeroes. For 32-bit devices, the first
+    group corresponds to the CRC and the second is a part of the
+    first section's name, therefore they can never be all zeroes.
+    """
+    fmt = "<IIIIII"
+    struct_size = struct.calcsize(fmt)
+    with open(filename, "rb") as f:
+        _, group1, _, group2, _, group3 = struct.unpack(fmt, f.read(struct_size))
+    return sum((group1, group2, group3)) == 0
 
 
 def main():
@@ -486,7 +532,7 @@ def main():
     if args.list:
         header = read_header(filename, section_count)
         header.print_debug()
-        check_crc(filename, section_count)
+        check_crc(filename, section_count, is64=header.is64)
 
     elif args.extract:
         output_dir = args.output_dir or make_output_dir_name(filename)
