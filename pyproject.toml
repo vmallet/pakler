@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+
+[project]
+name = "pakler"
+authors = [
+    {name="Vincent Mallet", email="vmallet@gmail.com"},
+]
+license = {text = "MIT License"}
+description = "Manipulate .PAK firmware files from Swann and Reolink"
+readme = "README.md"
+requires-python = ">=3.6"
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.6",
+]
+dynamic = ["version"]
+
+[project.scripts]
+pakler = "pakler:main"
+
+[project.urls]
+"Homepage" = "https://github.com/vmallet/pakler"
+
+[tool.setuptools]
+py-modules = ["pakler", "_version"]
+
+[tool.setuptools_scm]
+write_to = "_version.py"
