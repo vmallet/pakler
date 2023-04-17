@@ -12,10 +12,7 @@ import textwrap
 import zlib
 from typing import Optional
 
-try:
-    from _version import version
-except ModuleNotFoundError:
-    version = 'dev-local'
+__version__ = "0.1.1"
 
 EPILOG_MARKER = "##MYEPILOG##"
 
@@ -444,11 +441,11 @@ class EpilogizerHelpFormatter(argparse.HelpFormatter):
 def parse_args():
     parser = argparse.ArgumentParser(
         description='%(prog)s {} (by Vincent Mallet 2021) - manipulate Swann / Reolink PAK firmware files'.format(
-            version),
+            __version__),
         formatter_class=EpilogizerHelpFormatter,
         epilog=EPILOG_MARKER)
 
-    parser.add_argument('-v', '--version', action='version', version="%(prog)s {}".format(version))
+    parser.add_argument('-v', '--version', action='version', version="%(prog)s {}".format(__version__))
 
     pgroup = parser.add_mutually_exclusive_group()
     pgroup.add_argument('-l', '--list', dest='list', action='store_true',
@@ -501,7 +498,7 @@ def guess_section_count(filename, is64=None) -> Optional[int]:
 
 def is_64bit(filename):
     """Determine the firmware's target bitness.
-    
+
     Firmwares for 64-bit devices have 8 bytes long header fields
     instead of 4, with zero padding. That means the three "extra"
     groups of bytes are all zeroes. For 32-bit devices, the first
