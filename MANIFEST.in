@@ -1,0 +1,3 @@
+prune .idea
+exclude *.iml
+exclude .gitignore
