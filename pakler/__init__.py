@@ -12,7 +12,10 @@ import textwrap
 import zlib
 from typing import Optional
 
-__version__ = "0.1.1"
+try:
+    from ._version import __version__
+except ModuleNotFoundError:
+    __version__ = 'dev-local'
 
 EPILOG_MARKER = "##MYEPILOG##"
 
