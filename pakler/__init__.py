@@ -91,16 +91,19 @@ class Section:
         decode_strings(self, SECTION_STRINGS)
 
     def __repr__(self):
-        return 'Section {:2} name={:16} version={:16} start={:08x}  len={:08x}  (start={:8} len={:8})'.format(
-            self.num, quote_string(self.name), quote_string(self.version), self.start, self.len, self.start, self.len)
+        return f"{self.__class__.__qualname__}({self.name!r})"
 
     def __iter__(self):
         for key in dir(self):
             if not key.startswith('_'):
                 yield key, getattr(self, key)
 
-    def serialize(self):
+    def __bytes__(self):
         return struct.pack(self.section_format, self.name.encode(), self.version.encode(), self.start, self.len)
+
+    def debug_str(self):
+        return 'Section {:2} name={:16} version={:16} start=0x{:08x}  len=0x{:08x}  (start={:8} len={:8})'.format(
+            self.num, quote_string(self.name), quote_string(self.version), self.start, self.len, self.start, self.len)
 
 
 class MtdPart:
@@ -120,16 +123,19 @@ class MtdPart:
         decode_strings(self, MTD_PART_STRINGS)
 
     def __repr__(self):
-        return 'Mtd_part name={:16} mtd={:16}  a={:08x}  start={:08x}  len={:08x}'.format(
-            quote_string(self.name), quote_string(self.mtd), self.a, self.start, self.len)
+        return f"{self.__class__.__qualname__}({self.name!r})"
 
     def __iter__(self):
         for key in dir(self):
             if not key.startswith('_'):
                 yield key, getattr(self, key)
 
-    def serialize(self):
+    def __bytes__(self):
         return struct.pack(MTD_PART_FORMAT, self.name.encode(), self.a, self.mtd.encode(), self.start, self.len)
+
+    def debug_str(self):
+        return 'Mtd_part name={:16} mtd={:16}  a=0x{:08x}  start=0x{:08x}  len=0x{:08x}'.format(
+            quote_string(self.name), quote_string(self.mtd), self.a, self.start, self.len)
 
 
 class Header:
@@ -171,36 +177,40 @@ class Header:
         self._check_errors(buf[:-4])
 
     def __repr__(self):
-        return 'Header  magic={:08x}  crc32={:08x}  type={:08x}  sections=<{}>  mtd_parts=<{}>'.format(
-            self.magic, self.crc32, self.type, len(self.sections), len(self.mtd_parts))
+        return '{}(magic=0x{:08x}, crc32=0x{:08x}, type=0x{:08x})'.format(
+            self.__class__.__qualname__, self.magic, self.crc32, self.type, len(self.sections), len(self.mtd_parts))
 
     def __iter__(self):
         for key in dir(self):
             if not key.startswith('_'):
                 yield key, getattr(self, key)
 
-    def _check_errors(self, buf_crc):
-        if self.magic != PAK_MAGIC:
-            raise Exception(f"Wrong header magic: expected {PAK_MAGIC:08x}, got {self.magic:08x}")
-
-    def print_debug(self):
-        print(self)
-        for section in self.sections:
-            print(f"    {section}")
-        for part in self.mtd_parts:
-            print(f"    {part}")
-
-    def serialize(self):
+    def __bytes__(self):
         buf = struct.pack(self.header_format, self.magic, self.crc32, self.type)
         for section in self.sections:
-            buf += section.serialize()
+            buf += bytes(section)
         for mtd_part in self.mtd_parts:
-            buf += mtd_part.serialize()
+            buf += bytes(mtd_part)
 
         if len(buf) != self.size:
             raise Exception(f"Serialization error: should have been {self.size} bytes, but produced: {len(buf)} bytes")
 
         return buf
+
+    def _check_errors(self, buf_crc):
+        if self.magic != PAK_MAGIC:
+            raise Exception(f"Wrong header magic: expected 0x{PAK_MAGIC:08x}, got 0x{self.magic:08x}")
+
+    def debug_str(self):
+        return 'Header  magic=0x{:08x}  crc32=0x{:08x}  type=0x{:08x}  sections=<{}>  mtd_parts=<{}>'.format(
+            self.magic, self.crc32, self.type, len(self.sections), len(self.mtd_parts))
+
+    def print_debug(self):
+        print(self.debug_str())
+        for section in self.sections:
+            print(f"    {section.debug_str()}")
+        for part in self.mtd_parts:
+            print(f"    {part.debug_str()}")
 
 
 class PAK:
@@ -384,7 +394,7 @@ def check_crc(filename, section_count=None, mtd_part_count=None, is64=None):
         crc = pak.calc_crc()
 
     if crc != header.crc32:
-        print(f"CRC MISMATCH, file: {filename}, header.crc={header.crc32:08x}, got={crc:08x}")
+        print(f"CRC MISMATCH, file: {filename}, header.crc=0x{header.crc32:08x}, got=0x{crc:08x}")
         return False
 
     print(f"File passes CRC check: {filename}")
@@ -493,7 +503,7 @@ def replace_section(filename, section_file: Path, section_num, output_file: Path
 
         print(f"Writing header... ({new_header.size} bytes)")
         fout.seek(0)
-        fout.write(new_header.serialize())
+        fout.write(bytes(new_header))
 
     print("Updating CRC...")
     update_crc(output_file)
