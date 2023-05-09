@@ -46,7 +46,6 @@ pakler NVR8-7400_1705_3438_1103.pak
 ```
 
 ```
-Attempting to guess number of sections... guessed: 10
 Header  magic=32725913  crc32=0250e72d  type=00002302  sections=<10>  mtd_parts=<10>
     Section  0 name="uboot1"         version="v1.0.0.1"       start=00000584  len=000437d0  (start=    1412 len=  276432)
     Section  1 name=""               version=""               start=00043d54  len=00000000  (start=  277844 len=       0)
@@ -83,7 +82,6 @@ example:
 pakler ./NT98312_NVR_8IP_REOLINK_L300_130_21060706.pak -e -d newdir
 ```
 ```
-Attempting to guess number of sections... guessed: 11
 output: newdir
 Extracting section 0 (131072 bytes) into newdir/00_header.bin
 Extracting section 1 (18096 bytes) into newdir/01_loader.bin
@@ -114,7 +112,6 @@ pakler NT98312_NVR_8IP_REOLINK_L300_130_21060706.pak -r -n 5 -f patched_fs.bin -
 ````
 
 ```
-Attempting to guess number of sections... guessed: 11
 Input            : NT98312_NVR_8IP_REOLINK_L300_130_21060706.pak
 Output           : patched_fw.pak
 Replacing section: 5
