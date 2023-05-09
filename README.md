@@ -47,26 +47,26 @@ pakler NVR8-7400_1705_3438_1103.pak
 
 ```
 Header  magic=32725913  crc32=0250e72d  type=00002302  sections=<10>  mtd_parts=<10>
-    Section  0 name="uboot1"         version="v1.0.0.1"       start=00000584  len=000437d0  (start=    1412 len=  276432)
-    Section  1 name=""               version=""               start=00043d54  len=00000000  (start=  277844 len=       0)
-    Section  2 name="bootargs"       version="v1.0.0.1"       start=00043d54  len=00020000  (start=  277844 len=  131072)
-    Section  3 name="kernel"         version="v1.0.0.1"       start=00063d54  len=0023fdc8  (start=  408916 len= 2358728)
-    Section  4 name="fs"             version="v1.0.0.442"     start=002a3b1c  len=00402000  (start= 2767644 len= 4202496)
-    Section  5 name="app"            version="v1.0.0.421"     start=006a5b1c  len=00947000  (start= 6970140 len= 9728000)
-    Section  6 name=""               version=""               start=00fecb1c  len=00000000  (start=16698140 len=       0)
-    Section  7 name="logo"           version="v1.0.0.1"       start=00fecb1c  len=0000f1fd  (start=16698140 len=   61949)
-    Section  8 name=""               version=""               start=00ffbd19  len=00000000  (start=16760089 len=       0)
-    Section  9 name=""               version=""               start=00ffbd19  len=00000000  (start=16760089 len=       0)
-    Mtd_part name="uboot1"         mtd="/dev/mtd9"       a=00000000  start=00000000  len=00080000
-    Mtd_part name="uboot2"         mtd="/dev/mtd9"       a=00080000  start=00080000  len=001e0000
-    Mtd_part name="bootargs"       mtd="/dev/mtd9"       a=00260000  start=00260000  len=00020000
-    Mtd_part name="kernel"         mtd="/dev/mtd9"       a=00280000  start=00280000  len=00440000
-    Mtd_part name="fs"             mtd="/dev/mtd9"       a=006c0000  start=006c0000  len=00c00000
-    Mtd_part name="app"            mtd="/dev/mtd9"       a=012c0000  start=012c0000  len=02000000
-    Mtd_part name="para"           mtd="/dev/mtd9"       a=032c0000  start=032c0000  len=00800000
-    Mtd_part name="logo"           mtd="/dev/mtd9"       a=03ac0000  start=03ac0000  len=00200000
-    Mtd_part name="ipc_img"        mtd="/dev/mtd9"       a=03cc0000  start=03cc0000  len=00b00000
-    Mtd_part name="version"        mtd="/dev/mtd9"       a=ffffffff  start=ffffffff  len=00000000
+    Section  0 name="uboot1"         version="v1.0.0.1"       start=0x00000584  len=0x000437d0  (start=    1412 len=  276432)
+    Section  1 name=""               version=""               start=0x00043d54  len=0x00000000  (start=  277844 len=       0)
+    Section  2 name="bootargs"       version="v1.0.0.1"       start=0x00043d54  len=0x00020000  (start=  277844 len=  131072)
+    Section  3 name="kernel"         version="v1.0.0.1"       start=0x00063d54  len=0x0023fdc8  (start=  408916 len= 2358728)
+    Section  4 name="fs"             version="v1.0.0.442"     start=0x002a3b1c  len=0x00402000  (start= 2767644 len= 4202496)
+    Section  5 name="app"            version="v1.0.0.421"     start=0x006a5b1c  len=0x00947000  (start= 6970140 len= 9728000)
+    Section  6 name=""               version=""               start=0x00fecb1c  len=0x00000000  (start=16698140 len=       0)
+    Section  7 name="logo"           version="v1.0.0.1"       start=0x00fecb1c  len=0x0000f1fd  (start=16698140 len=   61949)
+    Section  8 name=""               version=""               start=0x00ffbd19  len=0x00000000  (start=16760089 len=       0)
+    Section  9 name=""               version=""               start=0x00ffbd19  len=0x00000000  (start=16760089 len=       0)
+    Mtd_part name="uboot1"         mtd="/dev/mtd9"       a=0x00000000  start=0x00000000  len=0x00080000
+    Mtd_part name="uboot2"         mtd="/dev/mtd9"       a=0x00080000  start=0x00080000  len=0x001e0000
+    Mtd_part name="bootargs"       mtd="/dev/mtd9"       a=0x00260000  start=0x00260000  len=0x00020000
+    Mtd_part name="kernel"         mtd="/dev/mtd9"       a=0x00280000  start=0x00280000  len=0x00440000
+    Mtd_part name="fs"             mtd="/dev/mtd9"       a=0x006c0000  start=0x006c0000  len=0x00c00000
+    Mtd_part name="app"            mtd="/dev/mtd9"       a=0x012c0000  start=0x012c0000  len=0x02000000
+    Mtd_part name="para"           mtd="/dev/mtd9"       a=0x032c0000  start=0x032c0000  len=0x00800000
+    Mtd_part name="logo"           mtd="/dev/mtd9"       a=0x03ac0000  start=0x03ac0000  len=0x00200000
+    Mtd_part name="ipc_img"        mtd="/dev/mtd9"       a=0x03cc0000  start=0x03cc0000  len=0x00b00000
+    Mtd_part name="version"        mtd="/dev/mtd9"       a=0xffffffff  start=0xffffffff  len=0x00000000
 File passes CRC check: NVR8-7400_1705_3438_1103.pak
 ```
 
@@ -131,28 +131,28 @@ Writing header... (1552 bytes)
 Updating CRC...
 Replacement completed. New header:
 Header  magic=32725913  crc32=41ee801c  type=00006202  sections=<11>  mtd_parts=<11>
-    Section  0 name="header"         version="v1.0.0.0"       start=00000610  len=00020000  (start=    1552 len=  131072)
-    Section  1 name="loader"         version="v1.0.0.0"       start=00020610  len=000046b0  (start=  132624 len=   18096)
-    Section  2 name="fdt"            version="v1.0.0.0"       start=00024cc0  len=00006724  (start=  150720 len=   26404)
-    Section  3 name="uboot"          version="v1.0.0.0"       start=0002b3e4  len=00065358  (start=  177124 len=  414552)
-    Section  4 name="kernel"         version="v1.0.0.0"       start=0009073c  len=002e2030  (start=  591676 len= 3022896)
-    Section  5 name="fs"             version="v1.0.0.0"       start=0037276c  len=00ba557a  (start= 3614572 len=12211578)
-    Section  6 name="app"            version="v1.0.0.0"       start=00f17ce6  len=01052000  (start=15826150 len=17113088)
-    Section  7 name=""               version=""               start=01f69ce6  len=00000000  (start=32939238 len=       0)
-    Section  8 name="logo"           version="v1.0.0.0"       start=01f69ce6  len=0001dcb4  (start=32939238 len=  122036)
-    Section  9 name=""               version=""               start=01f8799a  len=00000000  (start=33061274 len=       0)
-    Section 10 name=""               version=""               start=01f8799a  len=00000000  (start=33061274 len=       0)
-    Mtd_part name="header"         mtd="/dev/mtd9"       a=00000000  start=00000000  len=00020000
-    Mtd_part name="loader"         mtd="/dev/mtd9"       a=00020000  start=00020000  len=00080000
-    Mtd_part name="fdt"            mtd="/dev/mtd9"       a=000a0000  start=000a0000  len=00080000
-    Mtd_part name="uboot"          mtd="/dev/mtd9"       a=00120000  start=00120000  len=000e0000
-    Mtd_part name="kernel"         mtd="/dev/mtd9"       a=00200000  start=00200000  len=00500000
-    Mtd_part name="fs"             mtd="/dev/mtd9"       a=00700000  start=00700000  len=00f00000
-    Mtd_part name="app"            mtd="/dev/mtd9"       a=01600000  start=01600000  len=02000000
-    Mtd_part name="para"           mtd="/dev/mtd9"       a=03600000  start=03600000  len=00800000
-    Mtd_part name="logo"           mtd="/dev/mtd9"       a=03e00000  start=03e00000  len=00100000
-    Mtd_part name="uid"            mtd="/dev/mtd9"       a=03f00000  start=03f00000  len=00100000
-    Mtd_part name="version"        mtd="/dev/mtd9"       a=ffffffff  start=ffffffff  len=00000000
+    Section  0 name="header"         version="v1.0.0.0"       start=0x00000610  len=0x00020000  (start=    1552 len=  131072)
+    Section  1 name="loader"         version="v1.0.0.0"       start=0x00020610  len=0x000046b0  (start=  132624 len=   18096)
+    Section  2 name="fdt"            version="v1.0.0.0"       start=0x00024cc0  len=0x00006724  (start=  150720 len=   26404)
+    Section  3 name="uboot"          version="v1.0.0.0"       start=0x0002b3e4  len=0x00065358  (start=  177124 len=  414552)
+    Section  4 name="kernel"         version="v1.0.0.0"       start=0x0009073c  len=0x002e2030  (start=  591676 len= 3022896)
+    Section  5 name="fs"             version="v1.0.0.0"       start=0x0037276c  len=0x00ba557a  (start= 3614572 len=12211578)
+    Section  6 name="app"            version="v1.0.0.0"       start=0x00f17ce6  len=0x01052000  (start=15826150 len=17113088)
+    Section  7 name=""               version=""               start=0x01f69ce6  len=0x00000000  (start=32939238 len=       0)
+    Section  8 name="logo"           version="v1.0.0.0"       start=0x01f69ce6  len=0x0001dcb4  (start=32939238 len=  122036)
+    Section  9 name=""               version=""               start=0x01f8799a  len=0x00000000  (start=33061274 len=       0)
+    Section 10 name=""               version=""               start=0x01f8799a  len=0x00000000  (start=33061274 len=       0)
+    Mtd_part name="header"         mtd="/dev/mtd9"       a=0x00000000  start=0x00000000  len=0x00020000
+    Mtd_part name="loader"         mtd="/dev/mtd9"       a=0x00020000  start=0x00020000  len=0x00080000
+    Mtd_part name="fdt"            mtd="/dev/mtd9"       a=0x000a0000  start=0x000a0000  len=0x00080000
+    Mtd_part name="uboot"          mtd="/dev/mtd9"       a=0x00120000  start=0x00120000  len=0x000e0000
+    Mtd_part name="kernel"         mtd="/dev/mtd9"       a=0x00200000  start=0x00200000  len=0x00500000
+    Mtd_part name="fs"             mtd="/dev/mtd9"       a=0x00700000  start=0x00700000  len=0x00f00000
+    Mtd_part name="app"            mtd="/dev/mtd9"       a=0x01600000  start=0x01600000  len=0x02000000
+    Mtd_part name="para"           mtd="/dev/mtd9"       a=0x03600000  start=0x03600000  len=0x00800000
+    Mtd_part name="logo"           mtd="/dev/mtd9"       a=0x03e00000  start=0x03e00000  len=0x00100000
+    Mtd_part name="uid"            mtd="/dev/mtd9"       a=0x03f00000  start=0x03f00000  len=0x00100000
+    Mtd_part name="version"        mtd="/dev/mtd9"       a=0xffffffff  start=0xffffffff  len=0x00000000
 ```
 
 
