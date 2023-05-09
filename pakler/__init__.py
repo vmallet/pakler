@@ -4,9 +4,9 @@
 """Simple tool to manipulate PAK firmware files (list, extract, replace) for Swann and Reolink devices. See -h."""
 
 import io
-import os.path
 import struct
 import zlib
+from pathlib import Path
 from typing import Optional
 
 try:
@@ -70,7 +70,7 @@ def decode_strings(obj, fields):
 
 def quote_string(string):
     """Return the string surrounded with double-quotes."""
-    return '"{}"'.format(string)
+    return f'"{string}"'
 
 
 class Section:
@@ -153,7 +153,7 @@ class Header:
 
         self.size = calc_header_size(section_count, mtd_part_count, is64)
         if len(buf) != self.size:
-            raise Exception("Invalid header buffer size, expected: {}, got: {}".format(self.size, len(buf)))
+            raise Exception(f"Invalid header buffer size, expected: {self.size}, got: {len(buf)}")
 
         fields = zip(HEADER_FIELDS, struct.unpack(self.header_format, buf[:self.header_header_size]))
         for key, val in fields:
@@ -181,14 +181,14 @@ class Header:
 
     def _check_errors(self, buf_crc):
         if self.magic != PAK_MAGIC:
-            raise Exception("Wrong header magic: expected {:08x}, got {:08x}".format(PAK_MAGIC, self.magic))
+            raise Exception(f"Wrong header magic: expected {PAK_MAGIC:08x}, got {self.magic:08x}")
 
     def print_debug(self):
         print(self)
         for section in self.sections:
-            print("    {}".format(section))
+            print(f"    {section}")
         for part in self.mtd_parts:
-            print("    {}".format(part))
+            print(f"    {part}")
 
     def serialize(self):
         buf = struct.pack(self.header_format, self.magic, self.crc32, self.type)
@@ -198,8 +198,7 @@ class Header:
             buf += mtd_part.serialize()
 
         if len(buf) != self.size:
-            raise Exception("Serialization error: should have been {} bytes, but produced: {} bytes".format(
-                self.size, len(buf)))
+            raise Exception(f"Serialization error: should have been {self.size} bytes, but produced: {len(buf)} bytes")
 
         return buf
 
@@ -276,21 +275,21 @@ class PAK:
         with open(out_filename, "wb") as fout:
             copy(self._fd, fout, section.len)
 
-    def extract(self, output_dir, include_empty=False, quiet=True):
+    def extract(self, output_dir: Path, include_empty=False, quiet=True):
         """Extract all sections from the PAK file into individual files."""
-        if not os.path.exists(output_dir):
-            os.mkdir(output_dir)
+        if not output_dir.exists():
+            output_dir.mkdir()
 
-        if not os.path.exists(output_dir) or not os.path.isdir(output_dir):
-            raise Exception("Invalid output directory: {}".format(output_dir))
+        if not output_dir.exists() or not output_dir.is_dir():
+            raise Exception(f"Invalid output directory: {output_dir}")
 
         for section in self.sections:
-            out_filename = os.path.join(output_dir, make_section_filename(section))
+            out_filename = output_dir / make_section_filename(section)
             if section.len or include_empty:
-                _print("Extracting section {} ({} bytes) into {}".format(section.num, section.len, out_filename), quiet=quiet)
+                _print(f"Extracting section {section.num} ({section.len} bytes) into {out_filename}", quiet=quiet)
                 self.save_section(section, out_filename)
             else:
-                _print("Skipping empty section {}".format(section.num), quiet=quiet)
+                _print(f"Skipping empty section {section.num}", quiet=quiet)
 
     @staticmethod
     def is_64bit(fd):
@@ -337,7 +336,7 @@ class PAK:
         header_size = calc_header_size(section_count, section_count, is64)
         buf = fd.read(header_size)
         if len(buf) != header_size:
-            raise Exception("Header size error, expected: {}, got: {}".format(header_size, len(buf)))
+            raise Exception(f"Header size error, expected: {header_size}, got: {len(buf)}")
         return Header(buf, section_count, section_count, is64)
 
     @classmethod
@@ -385,10 +384,10 @@ def check_crc(filename, section_count=None, mtd_part_count=None, is64=None):
         crc = pak.calc_crc()
 
     if crc != header.crc32:
-        print("CRC MISMATCH, file: {}, header.crc={:08x}, got={:08x}".format(filename, header.crc32, crc))
+        print(f"CRC MISMATCH, file: {filename}, header.crc={header.crc32:08x}, got={crc:08x}")
         return False
 
-    print("File passes CRC check: {}".format(filename))
+    print(f"File passes CRC check: {filename}")
     return True
 
 
@@ -410,8 +409,8 @@ def update_crc(filename, section_count=None, is64=None):
 def make_section_filename(section):
     # TODO: should sanitize section name before turning it into a filename
     if section.name:
-        return "{:02}_{}.bin".format(section.num, section.name)
-    return "{:02}.bin".format(section.num)
+        return f"{section.num:02}_{section.name}.bin"
+    return f"{section.num:02}.bin"
 
 
 def copy(fin, fout, length):
@@ -421,7 +420,7 @@ def copy(fin, fout, length):
             chunk_size = length
         chunk = fin.read(chunk_size)
         if not chunk:
-            raise Exception("Read error with chunk_size={} length={}".format(chunk_size, length))
+            raise Exception(f"Read error with chunk_size={chunk_size} length={length}")
         fout.write(chunk)
         length -= chunk_size
 
@@ -432,25 +431,25 @@ def extract_section(f, section, out_filename):
         copy(f, fout, section.len)
 
 
-def extract(filename, output_dir, include_empty=False, section_count=None, mtd_part_count=None):
+def extract(filename, output_dir: Path, include_empty=False, section_count=None, mtd_part_count=None):
     """Extract all sections from the given PAK file into individual files."""
-    if not os.path.exists(output_dir):
-        os.mkdir(output_dir)
+    if not output_dir.exists():
+        output_dir.mkdir()
 
-    if not os.path.exists(output_dir) or not os.path.isdir(output_dir):
-        raise Exception("Invalid output directory: {}".format(output_dir))
+    if not output_dir.exists() or not output_dir.is_dir():
+        raise Exception(f"Invalid output directory: {output_dir}")
 
     with PAK.from_file(filename) as pak:
         for section in pak.sections:
-            out_filename = os.path.join(output_dir, make_section_filename(section))
+            out_filename = output_dir / make_section_filename(section)
             if section.len or include_empty:
-                print("Extracting section {} ({} bytes) into {}".format(section.num, section.len, out_filename))
+                print(f"Extracting section {section.num} ({section.len} bytes) into {out_filename}")
                 pak.save_section(section, out_filename)
             else:
-                print("Skipping empty section {}".format(section.num))
+                print(f"Skipping empty section {section.num}")
 
 
-def replace_section(filename, section_file, section_num, output_file, section_count=None, mtd_part_count=None):
+def replace_section(filename, section_file: Path, section_num, output_file: Path, section_count=None, mtd_part_count=None):
     """Copy the given PAK file into new output_file, replacing the specified section.
 
     :param filename: name of the input PAK firmware file
@@ -464,18 +463,18 @@ def replace_section(filename, section_file, section_num, output_file, section_co
         new_header = pak.header
         section_count = len(pak.sections)
 
-    if not os.path.isfile(section_file):
-        raise Exception("Section file doesn't exist or is not a file: {}".format(section_file))
+    if not section_file.is_file():
+        raise Exception(f"Section file doesn't exist or is not a file: {section_file}")
 
-    section_len = os.path.getsize(section_file)
+    section_len = section_file.stat().st_size
 
     if section_num < 0 or section_num >= section_count:
-        raise Exception("Invalid section number: {} (should be between 0 and {})".format(section_num, section_count))
+        raise Exception(f"Invalid section number: {section_num} (should be between 0 and {section_count})")
 
-    print("Input            : {}".format(filename))
-    print("Output           : {}".format(output_file))
-    print("Replacing section: {}".format(section_num))
-    print("Replacement file : {}".format(section_file))
+    print(f"Input            : {filename}")
+    print(f"Output           : {output_file}")
+    print(f"Replacing section: {section_num}")
+    print(f"Replacement file : {section_file}")
 
     with PAK.from_file(filename) as pak, open(section_file, "rb") as fsection, open(output_file, "wb") as fout:
         # Write placeholder header
@@ -486,13 +485,13 @@ def replace_section(filename, section_file, section_num, output_file, section_co
             new_header.sections[section.num].start = fout.tell()  # TODO: set up a check in Header.init() to validate sections[num].num==num
             if section.num == section_num:
                 new_header.sections[section.num].len = section_len
-                print("Replacing section {} ({} bytes) with {} bytes".format(section.num, section.len, section_len))
+                print(f"Replacing section {section.num} ({section.len} bytes) with {section_len} bytes")
                 copy(fsection, fout, section_len)
             else:
-                print("Copying section {} ({} bytes)".format(section.num, section.len))
+                print(f"Copying section {section.num} ({section.len} bytes)")
                 copy(pak._fd, fout, section.len)
 
-        print("Writing header... ({} bytes)".format(new_header.size))
+        print(f"Writing header... ({new_header.size} bytes)")
         fout.seek(0)
         fout.write(new_header.serialize())
 

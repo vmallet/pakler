@@ -4,8 +4,8 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import os.path
 import textwrap
+from pathlib import Path
 
 from . import PAK, __version__, check_crc, replace_section
 
@@ -30,13 +30,13 @@ class EpilogizerHelpFormatter(argparse.HelpFormatter):
 
 def make_epilogue_text(prog, indent, width):
     lines = [
-        '{} ~/fw/CAM_FW.pak'.format(prog),
+        f'{prog} ~/fw/CAM_FW.pak',
         'List the content of CAM_FW.pak, auto-detecting the number of sections',
         '',
-        '{} ~/fw/CAM_FW.pak -e -d /tmp/extracted/'.format(prog),
+        f'{prog} ~/fw/CAM_FW.pak -e -d /tmp/extracted/',
         'Extract all sections of CAM_FW.pak into /tmp/extracted',
         '',
-        '{} ~/fw/CAM_FW.pak -r -n 4 -f ~/fw/new_fs.cramfs -o ~/fw/CAM_FW_PATCHED.pak'.format(prog),
+        f'{prog} ~/fw/CAM_FW.pak -r -n 4 -f ~/fw/new_fs.cramfs -o ~/fw/CAM_FW_PATCHED.pak',
         'From firmware file ~/fw/CAM_FW.pak, replace the 4th section with new file ~/fw/new_fs.cramfs, writing'
         ' the output to ~/fw/CAM_FW_PATCHED.pak'
     ]
@@ -46,36 +46,35 @@ def make_epilogue_text(prog, indent, width):
     return "\n".join(["examples:"] + [wrapper.fill(line) for line in lines])
 
 
-def find_new_name(base):
+def find_new_name(base: Path):
     name = base
     suffix = 0
-    while os.path.exists(name):
+    while name.exists():
         suffix += 1
         if suffix == 1000:
-            raise Exception("Could not find a non-existing file/directory for base: {}".format(base))
-        name = "{}.{:03}".format(base, suffix)
+            raise Exception(f"Could not find a non-existing file/directory for base: {base}")
+        name = base.with_name(f"{base.name}.{suffix:03}")
 
     return name
 
 
-def make_output_file_name(filename):
-    base = filename + ".replaced"
+def make_output_file_name(filename: Path):
+    base = filename.with_name(filename.name + ".replaced")
     return find_new_name(base)
 
 
-def make_output_dir_name(filename):
-    base = filename + ".extracted"
+def make_output_dir_name(filename: Path):
+    base = filename.with_name(filename.name + ".extracted")
     return find_new_name(base)
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='%(prog)s {} (by Vincent Mallet 2021) - manipulate Swann / Reolink PAK firmware files'.format(
-            __version__),
+        description=f'%(prog)s {__version__} (by Vincent Mallet 2021) - manipulate Swann / Reolink PAK firmware files',
         formatter_class=EpilogizerHelpFormatter,
         epilog=EPILOG_MARKER)
 
-    parser.add_argument('-v', '--version', action='version', version="%(prog)s {}".format(__version__))
+    parser.add_argument('-v', '--version', action='version', version=f"%(prog)s {__version__}")
 
     pgroup = parser.add_mutually_exclusive_group()
     pgroup.add_argument('-l', '--list', dest='list', action='store_true',
@@ -84,14 +83,14 @@ def parse_args():
                         help='Replace a section into a new PAK file')
     pgroup.add_argument('-e', '--extract', dest='extract', action='store_true',
                         help='Extract sections to a directory')
-    parser.add_argument('-f', '--section-file', dest='section_file', help='Input binary file for section replacement')
+    parser.add_argument('-f', '--section-file', dest='section_file', type=Path, help='Input binary file for section replacement')
     parser.add_argument('-n', '--section-num', dest='section_num', type=int, help='Section number of replaced section')
-    parser.add_argument('-o', '--output', dest='output_pak', help='Name of output PAK file when replacing a section')
-    parser.add_argument('-d', '--output-dir', dest='output_dir',
+    parser.add_argument('-o', '--output', dest='output_pak', type=Path, help='Name of output PAK file when replacing a section')
+    parser.add_argument('-d', '--output-dir', dest='output_dir', type=Path,
                         help='Name of output directory when extracting sections')
     parser.add_argument('--empty', dest='include_empty', action='store_true',
                         help='Include empty sections when extracting')
-    parser.add_argument('filename', help='Name of PAK firmware file')
+    parser.add_argument('filename', type=Path, help='Name of PAK firmware file')
 
     args = parser.parse_args()
 
@@ -113,7 +112,7 @@ def main():
 
     elif args.extract:
         output_dir = args.output_dir or make_output_dir_name(filename)
-        print("output: {}".format(output_dir))
+        print(f"output: {output_dir}")
         with PAK.from_file(filename) as pak:
             pak.extract(output_dir, args.include_empty, quiet=False)
 
