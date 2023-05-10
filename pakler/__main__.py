@@ -4,10 +4,12 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import sys
 import textwrap
 from pathlib import Path
+from zipfile import ZipFile, is_zipfile
 
-from . import PAK, __version__, check_crc, replace_section
+from . import PAK, __version__, check_crc, is_pak_file, replace_section
 
 EPILOG_MARKER = "##MYEPILOG##"
 
@@ -105,16 +107,38 @@ def main():
     args = parse_args()
     filename = args.filename
 
+    if not is_pak_file(filename) and not is_zipfile(filename):
+        sys.exit("error: file is not a PAK or a ZIP, or doesn't exist")
+
     if args.list:
-        with PAK.from_file(filename) as pak:
-            pak.header.print_debug()
-            check_crc(filename)
+        if is_pak_file(filename):
+            with PAK.from_file(filename) as pak:
+                pak.header.print_debug()
+                check_crc(filename)
+        else:
+            with ZipFile(filename) as myzip:
+                for name in myzip.namelist():
+                    with myzip.open(name) as file:
+                        if is_pak_file(file):
+                            with PAK.from_fd(file, closefd=False) as pak:
+                                pak.header.print_debug()
+                            check_crc(file)
 
     elif args.extract:
         output_dir = args.output_dir or make_output_dir_name(filename)
         print(f"output: {output_dir}")
-        with PAK.from_file(filename) as pak:
-            pak.extract(output_dir, args.include_empty, quiet=False)
+        if is_pak_file(filename):
+            with PAK.from_file(filename) as pak:
+                pak.extract(output_dir, args.include_empty, quiet=False)
+        else:
+            with ZipFile(filename) as myzip:
+                for name in myzip.namelist():
+                    with myzip.open(name) as file:
+                        if is_pak_file(file):
+                            with PAK.from_fd(file) as pak:
+                                pak.extract(output_dir, args.include_empty, quiet=False)
+                            # If the ZIP has multiple PAKs, generate a new directory name.
+                            output_dir = make_output_dir_name(output_dir)
 
     elif args.replace:
         if not args.section_file or not args.section_num:
