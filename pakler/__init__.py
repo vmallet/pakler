@@ -8,6 +8,7 @@ import struct
 import zlib
 from pathlib import Path
 from typing import Optional
+from zipfile import ZipExtFile
 
 try:
     from ._version import __version__
@@ -17,6 +18,7 @@ except ModuleNotFoundError:
 CHUNK_SIZE = 128 * 1024
 
 PAK_MAGIC = 0x32725913
+PAK_MAGIC_BYTES = PAK_MAGIC.to_bytes(4, "little")
 
 SECTION_FORMAT = "<32s24sII"
 SECTION_FORMAT_64 = "<32s24sQQ"
@@ -37,7 +39,6 @@ MTD_PART_FIELDS = ['name',
 MTD_PART_STRINGS = ['name',
                     'mtd']
 MTD_PART_SIZE = struct.calcsize(MTD_PART_FORMAT)  # 76
-MTD_PART_COUNT = 10
 
 HEADER_FORMAT = "<III"
 HEADER_FORMAT_64 = "<QQQ"
@@ -389,9 +390,15 @@ def calc_crc(filename, section_count=None, is64=None):
 
 def check_crc(filename, section_count=None, mtd_part_count=None, is64=None):
     """Check the PAK file's crc matches the crc in its header."""
-    with PAK.from_file(filename) as pak:
-        header = pak.header
-        crc = pak.calc_crc()
+    if isinstance(filename, ZipExtFile):
+        with PAK.from_fd(filename) as pak:
+            header = pak.header
+            crc = pak.calc_crc()
+        filename = filename.name
+    else:
+        with PAK.from_file(filename) as pak:
+            header = pak.header
+            crc = pak.calc_crc()
 
     if crc != header.crc32:
         print(f"CRC MISMATCH, file: {filename}, header.crc=0x{header.crc32:08x}, got=0x{crc:08x}")
@@ -533,3 +540,24 @@ def is_64bit(filename):
 def _print(*args, **kwargs):
     if not kwargs.pop("quiet", False):
         print(*args, **kwargs)
+
+
+def _is_pak(file):
+    return file.read(4) == PAK_MAGIC_BYTES
+
+
+def is_pak_file(fileorbytes):
+    """See if a file is a PAK file by checking the magic number.
+
+    The argument may be a bytes object, a file or file-like object.
+    """
+    if isinstance(fileorbytes, (bytes, bytearray)):
+        return _is_pak(io.BytesIO(fileorbytes[:4]))
+    try:
+        if hasattr(fileorbytes, "read"):
+            return _is_pak(fileorbytes)
+        else:
+            with open(fileorbytes, "rb") as f:
+                return _is_pak(f)
+    except OSError:
+        return False
