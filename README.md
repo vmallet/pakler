@@ -1,13 +1,13 @@
 # pakler
 
-Pakler is a command-line tool used to manipulate `.pak` firmware files
+Pakler is a command-line tool and library used to manipulate `.pak` firmware files
 used by Swann and Reolink devices. You can list, extract, and replace their
 content. It makes it easy to explore and patch firmwares used by various
 NVRs, DVRs and IP cameras.
 
 ## Installing
 
-Note: pakler requires Python 3
+Note: pakler requires Python 3.6+
 
 ### Recommended
 
@@ -35,6 +35,8 @@ Help can be had with:
 ```shell
 pakler -h
 ```
+
+Note: list and extract also work with ZIPs that contain `.pak` files.
 
 ### Viewing content of `.pak` files
 
@@ -104,8 +106,8 @@ use the `-r` command, specify the number of the section to replace with `-n`,
 the file to use as a replacement with `-f`, and the output file to write
 the resulting patched file with `-o`.
 
-Here is an example where we replace the `.pak` file's section #3 with the
-file ""
+Here is an example where we replace the `.pak` file's section #5 with the
+file `patched_fs.bin`
 
 ```shell
 pakler NT98312_NVR_8IP_REOLINK_L300_130_21060706.pak -r -n 5 -f patched_fs.bin -o patched_fw.pak
@@ -155,6 +157,21 @@ Header  magic=32725913  crc32=41ee801c  type=00006202  sections=<11>  mtd_parts=
     Mtd_part name="version"        mtd="/dev/mtd9"       a=0xffffffff  start=0xffffffff  len=0x00000000
 ```
 
+### As a library
+
+Here are a few things you can do with pakler's API:
+
+```py
+from pakler import PAK
+
+with PAK.from_file("firmware.pak") as pak:  # Also from_bytes() and from_fd()
+    assert pak.crc == pak.calc_crc()
+    pak.extract("firmware_extracted")
+    print(pak.partitions)
+    section = pak.sections[0]
+    pak.save_section(section, f"{section.name}.bin")
+    section_bytes = pak.extract_section(section)
+```
 
 ## Naming
 
