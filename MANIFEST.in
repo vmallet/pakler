@@ -1,3 +1,4 @@
 prune .idea
+prune .github
 exclude *.iml
 exclude .gitignore
