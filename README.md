@@ -178,6 +178,18 @@ with PAK.from_file("firmware.pak") as pak:  # Also from_bytes() and from_fd()
 Why pakler? Take a **pak** and **L**ist it, **E**xtract it, or **R**eplace 
 parts of it... pakler? Makes sense! (Naming suggestions are welcome :) )
 
+## Version history
+
+* v0.2.0 - 2023/05/30 - The [AT0myks](https://github.com/AT0myks) release
+  
+  A big thanks to AT0myks for all the changes brought in this release.
+  - Make Pakler usable as a library (author: AT0myks)
+  - Support for 64-bit PAK files (author: AT0myks)
+  - Support for handling PAK files directly from ZIP archives (author: AT0myks)
+  - Several code layout and packaging improvements (author: AT0myks)
+
+* v0.1.0 - 2021/09/03 - Initial release
+
 ## Licensing
 
 pakler is licensed under MIT license. See [LICENSE](LICENSE)
