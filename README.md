@@ -180,7 +180,7 @@ parts of it... pakler? Makes sense! (Naming suggestions are welcome :) )
 
 ## Version history
 
-* v0.2.0 - 2023/05/30 - The [AT0myks](https://github.com/AT0myks) release
+* v0.2.0 - 2023/05/31 - The [AT0myks](https://github.com/AT0myks) release
   
   A big thanks to AT0myks for all the changes brought in this release.
   - Make Pakler usable as a library (author: AT0myks)
