@@ -369,25 +369,6 @@ class PAK:
         return cls.from_fd(open(path, "rb"), offset)
 
 
-def read_header(filename, section_count=None, mtd_part_count=None, is64=None):
-    """Read and parse the header of a PAK firmware file.
-
-    :param filename: name of the PAK firmware file
-    :param section_count: number of sections present in the header
-    :param mtd_part_count: optional number of mtd_parts, defaults to section_count
-    :param is64: bitness of the PAK firmware
-    :return: the parsed Header object
-    """
-    with PAK.from_file(filename) as pak:
-        return pak.header
-
-
-def calc_crc(filename, section_count=None, is64=None):
-    """Calculate the PAK file's CRC (which should match the header's CRC)."""
-    with PAK.from_file(filename) as pak:
-        return pak.calc_crc()
-
-
 def check_crc(filename, section_count=None, mtd_part_count=None, is64=None):
     """Check the PAK file's crc matches the crc in its header."""
     if isinstance(filename, ZipExtFile):
@@ -442,30 +423,6 @@ def copy(fin, fout, length):
         length -= chunk_size
 
 
-def extract_section(f, section, out_filename):
-    f.seek(section.start)
-    with open(out_filename, "wb") as fout:
-        copy(f, fout, section.len)
-
-
-def extract(filename, output_dir: Path, include_empty=False, section_count=None, mtd_part_count=None):
-    """Extract all sections from the given PAK file into individual files."""
-    if not output_dir.exists():
-        output_dir.mkdir()
-
-    if not output_dir.exists() or not output_dir.is_dir():
-        raise Exception(f"Invalid output directory: {output_dir}")
-
-    with PAK.from_file(filename) as pak:
-        for section in pak.sections:
-            out_filename = output_dir / make_section_filename(section)
-            if section.len or include_empty:
-                print(f"Extracting section {section.num} ({section.len} bytes) into {out_filename}")
-                pak.save_section(section, out_filename)
-            else:
-                print(f"Skipping empty section {section.num}")
-
-
 def replace_section(filename, section_file: Path, section_num, output_file: Path, section_count=None, mtd_part_count=None):
     """Copy the given PAK file into new output_file, replacing the specified section.
 
@@ -518,23 +475,6 @@ def replace_section(filename, section_file: Path, section_num, output_file: Path
     print("Replacement completed. New header: ")
     with PAK.from_file(output_file) as pak:
         pak.header.print_debug()
-
-
-def guess_section_count(filename, is64=None) -> Optional[int]:
-    """
-    Attempt to guess the number of sections for the given PAK firmware file.
-
-    :return: Guessed number of sections, or None if it couldn't be guessed
-    """
-    if is64 is None:
-        is64 = is_64bit(filename)
-    with open(filename, "rb") as f:
-        return PAK.get_section_count(f, is64)
-
-
-def is_64bit(filename):
-    with open(filename, "rb") as f:
-        return PAK.is_64bit(f)
 
 
 def _print(*args, **kwargs):
