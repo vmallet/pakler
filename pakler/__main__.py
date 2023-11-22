@@ -103,6 +103,13 @@ def parse_args():
     return args
 
 
+def _check_crc(filename):
+    try:
+        check_crc(filename)
+    except Exception as e:
+        print(e)
+
+
 def main():
     args = parse_args()
     filename = args.filename
@@ -114,7 +121,7 @@ def main():
         if is_pak_file(filename):
             with PAK.from_file(filename) as pak:
                 pak.print_debug()
-                check_crc(filename)
+                _check_crc(filename)
         else:
             with ZipFile(filename) as myzip:
                 for name in myzip.namelist():
@@ -122,7 +129,7 @@ def main():
                         if is_pak_file(file):
                             with PAK.from_fd(file, closefd=False) as pak:
                                 pak.print_debug()
-                            check_crc(file)
+                            _check_crc(file)
 
     elif args.extract:
         output_dir = args.output_dir or make_output_dir_name(filename)

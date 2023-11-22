@@ -146,6 +146,87 @@ class PAKPartition(_Base):
             quote_string(self.name), quote_string(self.mtd), self.a, self.start, self.len)
 
 
+class PAKSHeader(_Base):
+    _fields_ = [
+        ("_magic", c_uint32),
+        ("_unknown0", c_uint32),  # one of these is probably a checksum (maybe both)
+        ("_file_size", c_uint32),
+        ("_unknown1", c_uint32),  # always 1?
+        ("_unknown2", c_uint32),  # always 0?
+        ("_bdid", c_uint32),
+        ("_unknown3", c_uint32),  # one of these is probably a checksum (maybe both)
+        ("_hwver", c_char * 32),
+        ("_fwver", c_char * 32),
+        ("_data_size", c_uint32),  # _file_size - 104 (header size)
+        ("_nb_sections", c_uint32),
+        ("_unknown4", c_uint32),  # always 0?
+    ]
+
+    @property
+    def magic(self):
+        return self._magic
+
+    @property
+    def file_size(self):
+        return self._file_size
+
+    @property
+    def hwver(self):
+        return self._hwver.decode()
+
+    @property
+    def fwver(self):
+        return self._fwver.decode()
+
+    @property
+    def data_size(self):
+        return self._data_size
+
+    @property
+    def nb_sections(self):
+        return self._nb_sections
+
+
+class PAKSSection(_Base):
+    _fields_ = [
+        ("_imgs", c_uint32),
+        ("_checksum", c_uint32),
+        ("_name", c_char * 32),
+        ("_version", c_char * 32),
+        ("_len", c_uint32),
+        ("_unknown0", c_uint32),  # may be equal for different firmwares of the same device. might be needed during upgrade process?. always higher than previous section's?
+        ("_unknown1", c_uint32),  # may be equal for different firmwares of the same device. might be needed during upgrade process?
+        ("_unknown2", c_uint32),  # always 0?
+    ]
+
+    @property
+    def checksum(self):
+        return self._checksum
+
+    @property
+    def name(self):
+        return self._name.decode()
+
+    @property
+    def version(self):
+        return self._version.decode()
+
+    @property
+    def len(self):
+        return self._len
+
+    @property
+    def start(self):
+        return self._start
+
+    def __repr__(self):
+        return f"{self.__class__.__qualname__}({self.name!r})"
+
+    def debug_str(self, num):
+        return 'Section {:2} name={:16} version={:16} start=0x{:08x}  len=0x{:08x}  (start={:8} len={:8})'.format(
+            num, quote_string(self.name), quote_string(self.version), self.start, self.len, self.start, self.len)
+
+
 def quote_string(string):
     """Return the string surrounded with double-quotes."""
     return f'"{string}"'
