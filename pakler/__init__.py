@@ -7,6 +7,7 @@ import io
 import struct
 import zlib
 from ctypes import sizeof
+from enum import Enum, auto
 from pathlib import Path
 from zipfile import ZipExtFile
 
@@ -16,6 +17,8 @@ from pakler.structure import (
     PAK64Header,
     PAK64Section,
     PAKPartition,
+    PAKSHeader,
+    PAKSSection
 )
 
 try:
@@ -27,9 +30,17 @@ CHUNK_SIZE = 128 * 1024
 
 PAK_MAGIC = 0x32725913
 PAK_MAGIC_BYTES = PAK_MAGIC.to_bytes(4, "little")
+PAKS_MAGIC = 0x50414B53
+PAKS_MAGIC_BYTES = PAKS_MAGIC.to_bytes(4, "little")
 
 HEADER_CRC_OFFSET = 4  # Offset of the CRC in the file
 HEADER_CRC_OFFSET_64 = 8
+
+
+class PAKType(Enum):
+    PAK32 = auto()
+    PAK64 = auto()
+    PAKS = auto()
 
 
 class PAK:
@@ -40,7 +51,7 @@ class PAK:
         self._closefd = closefd
         self._sections = []
         self._partitions = []
-        self._is64 = self._is_64bit()
+        self._pak_type = self._get_pak_type()
         self._header = self._read_header()
         self._read_file()
 
@@ -57,11 +68,11 @@ class PAK:
 
     @property
     def crc(self):
-        return self._header.crc32
+        return getattr(self._header, "crc32", 0)
 
     @property
     def type(self):
-        return self._header.type
+        return getattr(self._header, "type", 0)
 
     @property
     def header(self):
@@ -77,7 +88,11 @@ class PAK:
 
     @property
     def is64(self):
-        return self._is64
+        return self._pak_type == PAKType.PAK64
+
+    @property
+    def pak_type(self):
+        return self._pak_type
 
     def close(self):
         self._fd.close()
@@ -85,6 +100,8 @@ class PAK:
 
     def calc_crc(self):
         """Calculate the PAK file's CRC (which should match the header's CRC)."""
+        if self._pak_type == PAKType.PAKS:
+            raise Exception("Cannot calculate CRC of PAKS")
         crc = 0xffffffff
         self._fd.seek(self._offset + self._sections[0].start)
 
@@ -139,16 +156,23 @@ class PAK:
 
     def _read_file(self):
         self._fd.seek(self._offset + sizeof(self._header))
-        sec_cls = PAK64Section if self.is64 else PAK32Section
-        while True:
-            section = sec_cls.from_fd(self._fd)
-            if self._sections and section.name == self._sections[0].name:
-                # We have reached (and read a part of) the first partition.
-                self._fd.seek(-sizeof(sec_cls), 1)
-                break
-            self._sections.append(section)
-        for _ in range(len(self._sections)):
-            self._partitions.append(PAKPartition.from_fd(self._fd))
+        if self._pak_type == PAKType.PAKS:
+            for _ in range(self._header.nb_sections):
+                section = PAKSSection.from_fd(self._fd)
+                section._start = self._fd.tell() - self._offset
+                self._sections.append(section)
+                self._fd.seek(section.len, 1)
+        else:
+            cls = PAK64Section if self.is64 else PAK32Section
+            while True:
+                section = cls.from_fd(self._fd)
+                if self._sections and section.name == self._sections[0].name:
+                    # We have reached (and read a part of) the first partition.
+                    self._fd.seek(-sizeof(cls), 1)
+                    break
+                self._sections.append(section)
+            for _ in range(len(self._sections)):
+                self._partitions.append(PAKPartition.from_fd(self._fd))
 
     def _is_64bit(self):
         """Determine the firmware's target bitness.
@@ -165,12 +189,23 @@ class PAK:
         _, group1, _, group2, _, group3 = struct.unpack(fmt, self._fd.read(struct_size))
         return sum((group1, group2, group3)) == 0
 
+    def _get_pak_type(self):
+        self._fd.seek(self._offset)
+        magic = self._fd.read(4)
+        if not is_pak_file(magic):
+            raise Exception("Not a PAK file")
+        if magic == PAKS_MAGIC_BYTES:
+            return PAKType.PAKS
+        return PAKType.PAK64 if self._is_64bit() else PAKType.PAK32
+
     def _read_header(self):
         """Read and parse the header of a PAK firmware file.
 
         :return: the parsed Header object
         """
         self._fd.seek(self._offset)
+        if self._pak_type == PAKType.PAKS:
+            return PAKSHeader.from_fd(self._fd)
         cls = PAK64Header if self.is64 else PAK32Header
         return cls.from_fd(self._fd)
 
@@ -252,6 +287,8 @@ def replace_section(filename, section_file: Path, section_num, output_file: Path
     :param mtd_part_count:  optional number of mtd_parts in the input PAK file
     """
     with PAK.from_file(filename) as pak:
+        if pak.pak_type == PAKType.PAKS:
+            raise Exception("Cannot replace section of PAKS")
         section_count = len(pak.sections)
 
     if not section_file.is_file():
@@ -305,7 +342,7 @@ def _print(*args, **kwargs):
 
 
 def _is_pak(file):
-    return file.read(4) == PAK_MAGIC_BYTES
+    return file.read(4) in (PAK_MAGIC_BYTES, PAKS_MAGIC_BYTES)
 
 
 def is_pak_file(fileorbytes):
