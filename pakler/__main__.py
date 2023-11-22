@@ -113,7 +113,7 @@ def main():
     if args.list:
         if is_pak_file(filename):
             with PAK.from_file(filename) as pak:
-                pak.header.print_debug()
+                pak.print_debug()
                 check_crc(filename)
         else:
             with ZipFile(filename) as myzip:
@@ -121,7 +121,7 @@ def main():
                     with myzip.open(name) as file:
                         if is_pak_file(file):
                             with PAK.from_fd(file, closefd=False) as pak:
-                                pak.header.print_debug()
+                                pak.print_debug()
                             check_crc(file)
 
     elif args.extract:
