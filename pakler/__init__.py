@@ -222,7 +222,7 @@ class PAK:
         return cls.from_fd(open(path, "rb"), offset)
 
 
-def check_crc(filename, section_count=None, mtd_part_count=None, is64=None):
+def check_crc(filename):
     """Check the PAK file's crc matches the crc in its header."""
     if isinstance(filename, ZipExtFile):
         with PAK.from_fd(filename) as pak:
@@ -242,7 +242,7 @@ def check_crc(filename, section_count=None, mtd_part_count=None, is64=None):
     return True
 
 
-def update_crc(filename, section_count=None, is64=None):
+def update_crc(filename):
     """Recompute the PAK file's crc and store it in its header.
 
     Note: the PAK file is modified by this operation.
@@ -276,15 +276,13 @@ def copy(fin, fout, length):
         length -= chunk_size
 
 
-def replace_section(filename, section_file: Path, section_num, output_file: Path, section_count=None, mtd_part_count=None):
+def replace_section(filename, section_file: Path, section_num, output_file: Path):
     """Copy the given PAK file into new output_file, replacing the specified section.
 
     :param filename: name of the input PAK firmware file
     :param section_file: name of the file containing the section to be swapped-in
     :param section_num: number of the section to be replaced
     :param output_file: name of the output file which will contained the modified PAK file
-    :param section_count: number of sections in the input PAK file
-    :param mtd_part_count:  optional number of mtd_parts in the input PAK file
     """
     with PAK.from_file(filename) as pak:
         if pak.pak_type == PAKType.PAKS:
