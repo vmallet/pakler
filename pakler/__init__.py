@@ -34,13 +34,14 @@ HEADER_CRC_OFFSET_64 = 8
 
 class PAK:
 
-    def __init__(self, fd, header, is64, closefd=True) -> None:
+    def __init__(self, fd, offset=0, closefd=True) -> None:
         self._fd = fd
-        self._header = header
-        self._is64 = is64
+        self._offset = offset
         self._closefd = closefd
         self._sections = []
         self._partitions = []
+        self._is64 = self._is_64bit()
+        self._header = self._read_header()
         self._read_file()
 
     def __enter__(self):
@@ -85,7 +86,7 @@ class PAK:
     def calc_crc(self):
         """Calculate the PAK file's CRC (which should match the header's CRC)."""
         crc = 0xffffffff
-        self._fd.seek(self._sections[0].start)
+        self._fd.seek(self._offset + self._sections[0].start)
 
         for chunk in iter(lambda: self._fd.read(CHUNK_SIZE), b''):
             crc = zlib.crc32(chunk, crc)
@@ -93,7 +94,7 @@ class PAK:
         buf = b'\2\0\0\0'  # TODO explain...
         crc = zlib.crc32(buf, crc)
 
-        self._fd.seek(sizeof(self._header))
+        self._fd.seek(self._offset + sizeof(self._header))
         buf = self._fd.read(len(self.sections) * sizeof(self._sections[0]))
         crc = zlib.crc32(buf, crc)
 
@@ -101,11 +102,11 @@ class PAK:
         return crc
 
     def extract_section(self, section):
-        self._fd.seek(section.start)
+        self._fd.seek(self._offset + section.start)
         return self._fd.read(section.len)
 
     def save_section(self, section, out_filename):
-        self._fd.seek(section.start)
+        self._fd.seek(self._offset + section.start)
         with open(out_filename, "wb") as fout:
             copy(self._fd, fout, section.len)
 
@@ -137,6 +138,7 @@ class PAK:
             print(f"    {part.debug_str()}")
 
     def _read_file(self):
+        self._fd.seek(self._offset + sizeof(self._header))
         sec_cls = PAK64Section if self.is64 else PAK32Section
         while True:
             section = sec_cls.from_fd(self._fd)
@@ -148,8 +150,7 @@ class PAK:
         for _ in range(len(self._sections)):
             self._partitions.append(PAKPartition.from_fd(self._fd))
 
-    @staticmethod
-    def is_64bit(fd):
+    def _is_64bit(self):
         """Determine the firmware's target bitness.
 
         Firmwares for 64-bit devices have 8 bytes long header fields
@@ -160,27 +161,22 @@ class PAK:
         """
         fmt = "<IIIIII"
         struct_size = struct.calcsize(fmt)
-        _, group1, _, group2, _, group3 = struct.unpack(fmt, fd.read(struct_size))
+        self._fd.seek(self._offset)
+        _, group1, _, group2, _, group3 = struct.unpack(fmt, self._fd.read(struct_size))
         return sum((group1, group2, group3)) == 0
 
-    @staticmethod
-    def read_header(fd, is64):
+    def _read_header(self):
         """Read and parse the header of a PAK firmware file.
 
-        :param fd: file object representing the PAK firmware file
-        :param is64: bitness of the PAK firmware
         :return: the parsed Header object
         """
-        cls = PAK64Header if is64 else PAK32Header
-        return cls.from_fd(fd)
+        self._fd.seek(self._offset)
+        cls = PAK64Header if self.is64 else PAK32Header
+        return cls.from_fd(self._fd)
 
     @classmethod
     def from_fd(cls, fd, offset=0, closefd=True):
-        fd.seek(offset)
-        is64 = cls.is_64bit(fd)
-        fd.seek(offset)
-        header = cls.read_header(fd, is64)
-        return cls(fd, header, is64, closefd)
+        return cls(fd, offset, closefd)
 
     @classmethod
     def from_bytes(cls, bytes_, offset=0):
