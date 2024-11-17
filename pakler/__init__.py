@@ -30,8 +30,12 @@ CHUNK_SIZE = 128 * 1024
 
 PAK_MAGIC = 0x32725913
 PAK_MAGIC_BYTES = PAK_MAGIC.to_bytes(4, "little")
+PAK_MAGIC2 = 0x32725923
+PAK_MAGIC2_BYTES = PAK_MAGIC2.to_bytes(4, "little")
 PAKS_MAGIC = 0x50414B53
 PAKS_MAGIC_BYTES = PAKS_MAGIC.to_bytes(4, "little")
+
+PAK_MAGICS_BYTES = (PAK_MAGIC_BYTES, PAK_MAGIC2_BYTES, PAKS_MAGIC_BYTES)
 
 HEADER_CRC_OFFSET = 4  # Offset of the CRC in the file
 HEADER_CRC_OFFSET_64 = 8
@@ -340,7 +344,7 @@ def _print(*args, **kwargs):
 
 
 def _is_pak(file):
-    return file.read(4) in (PAK_MAGIC_BYTES, PAKS_MAGIC_BYTES)
+    return file.read(4) in PAK_MAGICS_BYTES
 
 
 def is_pak_file(fileorbytes):
