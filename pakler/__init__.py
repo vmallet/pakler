@@ -55,7 +55,7 @@ class PAKType(Enum):
 class PAK:
 
     def __init__(self, fd: IOBytes, offset: int = 0, closefd: bool = True) -> None:
-        self._fd: Optional[IOBytes] = fd
+        self._real_fd: Optional[IOBytes] = fd
         self._offset = offset
         self._closefd = closefd
         self._sections: List[Section] = []
@@ -70,6 +70,16 @@ class PAK:
     def __exit__(self, *exc_info: Unused) -> None:
         if self._closefd:
             self.close()
+
+    @property
+    def _fd(self) -> IOBytes:
+        if self._real_fd is None:
+            raise ValueError("Attempt to use PAK file that was already closed")
+        return self._real_fd
+
+    @property
+    def closed(self) -> bool:
+        return self._real_fd is None
 
     @property
     def magic(self) -> int:
@@ -104,8 +114,9 @@ class PAK:
         return self._pak_type
 
     def close(self) -> None:
-        self._fd.close()
-        self._fd = None
+        if self._real_fd is not None:
+            self._real_fd.close()
+            self._real_fd = None
 
     def calc_crc(self) -> int:
         """Calculate the PAK file's CRC (which should match the header's CRC)."""
