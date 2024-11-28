@@ -130,6 +130,8 @@ def main() -> None:
             with PAK.from_file(filename) as pak:
                 pak.print_debug()
                 _check_crc(filename)
+        elif sys.version_info < (3, 7):
+            sys.exit("error: pakler does not support ZIP files on Python 3.6 (can't seek)")
         else:
             with ZipFile(filename) as myzip:
                 for name in myzip.namelist():
@@ -145,6 +147,8 @@ def main() -> None:
         if is_pak_file(filename):
             with PAK.from_file(filename) as pak:
                 pak.extract(output_dir, args.include_empty, quiet=False)
+        elif sys.version_info < (3, 7):
+            sys.exit("error: pakler does not support ZIP files on Python 3.6 (can't seek)")
         else:
             with ZipFile(filename) as myzip:
                 for name in myzip.namelist():
