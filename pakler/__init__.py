@@ -6,20 +6,25 @@
 import io
 import struct
 import zlib
+from array import array
 from ctypes import sizeof
 from enum import Enum, auto
+from mmap import mmap
 from pathlib import Path
-from zipfile import ZipExtFile
+from typing import Any, BinaryIO, List, Optional, Union, cast
 
 from pakler.structure import (
+    Header,
     PAK32Header,
     PAK32Section,
     PAK64Header,
     PAK64Section,
     PAKPartition,
     PAKSHeader,
-    PAKSSection
+    PAKSSection,
+    Section
 )
+from pakler.types import FileDescriptorOrPath, IOBytes, ReadableBuffer, Unused
 
 try:
     from ._version import __version__
@@ -49,12 +54,12 @@ class PAKType(Enum):
 
 class PAK:
 
-    def __init__(self, fd, offset=0, closefd=True) -> None:
-        self._fd = fd
+    def __init__(self, fd: IOBytes, offset: int = 0, closefd: bool = True) -> None:
+        self._fd: Optional[IOBytes] = fd
         self._offset = offset
         self._closefd = closefd
-        self._sections = []
-        self._partitions = []
+        self._sections: List[Section] = []
+        self._partitions: List[PAKPartition] = []
         self._pak_type = self._get_pak_type()
         self._header = self._read_header()
         self._read_file()
@@ -62,47 +67,47 @@ class PAK:
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, *exc_info: Unused) -> None:
         if self._closefd:
             self.close()
 
     @property
-    def magic(self):
+    def magic(self) -> int:
         return self._header.magic
 
     @property
-    def crc(self):
+    def crc(self) -> int:
         return getattr(self._header, "crc32", 0)
 
     @property
-    def type(self):
+    def type(self) -> int:
         return getattr(self._header, "type", 0)
 
     @property
-    def header(self):
+    def header(self) -> Header:
         return self._header
 
     @property
-    def sections(self):
+    def sections(self) -> List[Section]:
         return self._sections
 
     @property
-    def partitions(self):
+    def partitions(self) -> List[PAKPartition]:
         return self._partitions
 
     @property
-    def is64(self):
+    def is64(self) -> bool:
         return self._pak_type == PAKType.PAK64
 
     @property
-    def pak_type(self):
+    def pak_type(self) -> PAKType:
         return self._pak_type
 
-    def close(self):
+    def close(self) -> None:
         self._fd.close()
         self._fd = None
 
-    def calc_crc(self):
+    def calc_crc(self) -> int:
         """Calculate the PAK file's CRC (which should match the header's CRC)."""
         if self._pak_type == PAKType.PAKS:
             raise Exception("Cannot calculate CRC of PAKS")
@@ -122,16 +127,16 @@ class PAK:
         crc = crc ^ 0xffffffff
         return crc
 
-    def extract_section(self, section):
+    def extract_section(self, section: Section) -> bytes:
         self._fd.seek(self._offset + section.start)
         return self._fd.read(section.len)
 
-    def save_section(self, section, out_filename):
+    def save_section(self, section: Section, out_filename: FileDescriptorOrPath) -> None:
         self._fd.seek(self._offset + section.start)
         with open(out_filename, "wb") as fout:
             copy(self._fd, fout, section.len)
 
-    def extract(self, output_dir: Path, include_empty=False, quiet=True):
+    def extract(self, output_dir: Path, include_empty: bool = False, quiet: bool = True) -> None:
         """Extract all sections from the PAK file into individual files."""
         if not output_dir.exists():
             output_dir.mkdir()
@@ -147,18 +152,18 @@ class PAK:
             else:
                 _print(f"Skipping empty section {num}", quiet=quiet)
 
-    def debug_str(self):
+    def debug_str(self) -> str:
         return 'Header  magic=0x{:08x}  crc32=0x{:08x}  type=0x{:08x}  sections=<{}>  mtd_parts=<{}>'.format(
             self.magic, self.crc, self.type, len(self.sections), len(self.partitions))
 
-    def print_debug(self):
+    def print_debug(self) -> None:
         print(self.debug_str())
         for num, section in enumerate(self.sections):
             print(f"    {section.debug_str(num)}")
         for part in self.partitions:
             print(f"    {part.debug_str()}")
 
-    def _read_file(self):
+    def _read_file(self) -> None:
         self._fd.seek(self._offset + sizeof(self._header))
         if self._pak_type == PAKType.PAKS:
             for _ in range(self._header.nb_sections):
@@ -178,7 +183,7 @@ class PAK:
             for _ in range(len(self._sections)):
                 self._partitions.append(PAKPartition.from_fd(self._fd))
 
-    def _is_64bit(self):
+    def _is_64bit(self) -> bool:
         """Determine the firmware's target bitness.
 
         Firmwares for 64-bit devices have 8 bytes long header fields
@@ -193,7 +198,7 @@ class PAK:
         _, group1, _, group2, _, group3 = struct.unpack(fmt, self._fd.read(struct_size))
         return sum((group1, group2, group3)) == 0
 
-    def _get_pak_type(self):
+    def _get_pak_type(self) -> PAKType:
         self._fd.seek(self._offset)
         magic = self._fd.read(4)
         if not is_pak_file(magic):
@@ -202,7 +207,7 @@ class PAK:
             return PAKType.PAKS
         return PAKType.PAK64 if self._is_64bit() else PAKType.PAK32
 
-    def _read_header(self):
+    def _read_header(self) -> Header:
         """Read and parse the header of a PAK firmware file.
 
         :return: the parsed Header object
@@ -214,25 +219,26 @@ class PAK:
         return cls.from_fd(self._fd)
 
     @classmethod
-    def from_fd(cls, fd, offset=0, closefd=True):
+    def from_fd(cls, fd: IOBytes, offset: int = 0, closefd: bool = True):
         return cls(fd, offset, closefd)
 
     @classmethod
-    def from_bytes(cls, bytes_, offset=0):
+    def from_bytes(cls, bytes_: ReadableBuffer, offset: int = 0):
         return cls.from_fd(io.BytesIO(bytes_), offset)
 
     @classmethod
-    def from_file(cls, path, offset=0):
+    def from_file(cls, path: FileDescriptorOrPath, offset: int = 0):
         return cls.from_fd(open(path, "rb"), offset)
 
 
-def check_crc(filename):
+def check_crc(filename: Union[FileDescriptorOrPath, IOBytes]) -> bool:
     """Check the PAK file's crc matches the crc in its header."""
-    if isinstance(filename, ZipExtFile):
+    # TODO: Should be isinstance(filename, IOBytes) once 3.10 is minimum version.
+    if isinstance(filename, (BinaryIO, io.BufferedIOBase)):
         with PAK.from_fd(filename) as pak:
             header = pak.header
             crc = pak.calc_crc()
-        filename = filename.name
+        filename = filename.name  # type: ignore
     else:
         with PAK.from_file(filename) as pak:
             header = pak.header
@@ -246,7 +252,7 @@ def check_crc(filename):
     return True
 
 
-def update_crc(filename):
+def update_crc(filename: FileDescriptorOrPath) -> None:
     """Recompute the PAK file's crc and store it in its header.
 
     Note: the PAK file is modified by this operation.
@@ -261,14 +267,14 @@ def update_crc(filename):
         f.write(struct.pack(fmt, crc))
 
 
-def make_section_filename(section, num):
+def make_section_filename(section: Section, num: int) -> str:
     # TODO: should sanitize section name before turning it into a filename
     if section.name:
         return f"{num:02}_{section.name}.bin"
     return f"{num:02}.bin"
 
 
-def copy(fin, fout, length):
+def copy(fin: IOBytes, fout: BinaryIO, length: int) -> None:
     chunk_size = CHUNK_SIZE
     while length > 0:
         if length < chunk_size:
@@ -280,7 +286,7 @@ def copy(fin, fout, length):
         length -= chunk_size
 
 
-def replace_section(filename, section_file: Path, section_num, output_file: Path):
+def replace_section(filename: FileDescriptorOrPath, section_file: Path, section_num: int, output_file: Path) -> None:
     """Copy the given PAK file into new output_file, replacing the specified section.
 
     :param filename: name of the input PAK firmware file
@@ -338,27 +344,28 @@ def replace_section(filename, section_file: Path, section_num, output_file: Path
         pak.print_debug()
 
 
-def _print(*args, **kwargs):
+def _print(*args: Any, **kwargs: Any) -> None:
     if not kwargs.pop("quiet", False):
         print(*args, **kwargs)
 
 
-def _is_pak(file):
+def _is_pak(file: IOBytes) -> bool:
     return file.read(4) in PAK_MAGICS_BYTES
 
 
-def is_pak_file(fileorbytes):
+def is_pak_file(fileorbytes: Union[ReadableBuffer, FileDescriptorOrPath, IOBytes]) -> bool:
     """See if a file is a PAK file by checking the magic number.
 
     The argument may be a bytes object, a file or file-like object.
     """
-    if isinstance(fileorbytes, (bytes, bytearray)):
+    # TODO: Should be isinstance(fileorbytes, ReadableBuffer) once 3.10 is minimum version.
+    if isinstance(fileorbytes, (bytes, bytearray, memoryview, array, mmap)):
         return _is_pak(io.BytesIO(fileorbytes[:4]))
     try:
         if hasattr(fileorbytes, "read"):
-            return _is_pak(fileorbytes)
+            return _is_pak(cast(IOBytes, fileorbytes))
         else:
-            with open(fileorbytes, "rb") as f:
+            with open(cast(FileDescriptorOrPath, fileorbytes), "rb") as f:
                 return _is_pak(f)
     except OSError:
         return False

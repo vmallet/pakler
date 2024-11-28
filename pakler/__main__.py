@@ -7,9 +7,11 @@ import argparse
 import sys
 import textwrap
 from pathlib import Path
+from typing import Optional, Union, cast
 from zipfile import ZipFile, is_zipfile
 
-from . import PAK, __version__, check_crc, is_pak_file, replace_section
+from pakler import PAK, __version__, check_crc, is_pak_file, replace_section
+from pakler.types import FileDescriptorOrPath, IOBytes, MainArgs
 
 EPILOG_MARKER = "##MYEPILOG##"
 
@@ -19,18 +21,24 @@ class EpilogizerHelpFormatter(argparse.HelpFormatter):
     Help message formatter which injects a pre-formatted epilog text if the text to be formatted is the EPILOG_MARKER.
     """
 
-    def __init__(self, prog, indent_increment=2, max_help_position=24, width=None) -> None:
+    def __init__(
+            self,
+            prog: str,
+            indent_increment: int = 2,
+            max_help_position: int = 24,
+            width: Optional[int] = None
+    ) -> None:
         super().__init__(prog, indent_increment, max_help_position, width)
         self._my_prog = prog
         self._my_indent = ' ' * indent_increment
 
-    def _fill_text(self, text, width, indent):
+    def _fill_text(self, text: str, width: int, indent: str) -> str:
         if text == EPILOG_MARKER:
             return make_epilogue_text(self._my_prog, self._my_indent, width)
         return super()._fill_text(text, width, indent)
 
 
-def make_epilogue_text(prog, indent, width):
+def make_epilogue_text(prog: str, indent: str, width: int) -> str:
     lines = [
         f'{prog} ~/fw/CAM_FW.pak',
         'List the content of CAM_FW.pak, auto-detecting the number of sections',
@@ -48,7 +56,7 @@ def make_epilogue_text(prog, indent, width):
     return "\n".join(["examples:"] + [wrapper.fill(line) for line in lines])
 
 
-def find_new_name(base: Path):
+def find_new_name(base: Path) -> Path:
     name = base
     suffix = 0
     while name.exists():
@@ -60,17 +68,17 @@ def find_new_name(base: Path):
     return name
 
 
-def make_output_file_name(filename: Path):
+def make_output_file_name(filename: Path) -> Path:
     base = filename.with_name(filename.name + ".replaced")
     return find_new_name(base)
 
 
-def make_output_dir_name(filename: Path):
+def make_output_dir_name(filename: Path) -> Path:
     base = filename.with_name(filename.name + ".extracted")
     return find_new_name(base)
 
 
-def parse_args():
+def parse_args() -> MainArgs:
     parser = argparse.ArgumentParser(
         description=f'%(prog)s {__version__} (by Vincent Mallet 2021) - manipulate Swann / Reolink PAK firmware files',
         formatter_class=EpilogizerHelpFormatter,
@@ -94,7 +102,7 @@ def parse_args():
                         help='Include empty sections when extracting')
     parser.add_argument('filename', type=Path, help='Name of PAK firmware file')
 
-    args = parser.parse_args()
+    args = cast(MainArgs, parser.parse_args())
 
     # Set default action as "list"
     if not (args.list or args.replace or args.extract):
@@ -103,14 +111,14 @@ def parse_args():
     return args
 
 
-def _check_crc(filename):
+def _check_crc(filename: Union[FileDescriptorOrPath, IOBytes]) -> None:
     try:
         check_crc(filename)
     except Exception as e:
         print(e)
 
 
-def main():
+def main() -> None:
     args = parse_args()
     filename = args.filename
 
