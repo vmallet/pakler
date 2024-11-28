@@ -28,6 +28,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Utilities",
+    "Typing :: Typed",
 ]
 dynamic = ["version"]
 
@@ -40,6 +41,7 @@ Issues = "https://github.com/vmallet/pakler/issues"
 
 [tool.setuptools]
 packages = ["pakler"]
+package-data = {pakler = ["py.typed"]}
 
 [tool.setuptools_scm]
 write_to = "pakler/_version.py"
