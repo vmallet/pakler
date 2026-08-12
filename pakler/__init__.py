@@ -10,6 +10,7 @@ from ctypes import sizeof
 from enum import Enum, auto
 from pathlib import Path
 from zipfile import ZipExtFile
+import crcmod
 
 from pakler.structure import (
     PAK32Header,
@@ -104,23 +105,23 @@ class PAK:
 
     def calc_crc(self):
         """Calculate the PAK file's CRC (which should match the header's CRC)."""
-        if self._pak_type == PAKType.PAKS:
-            raise Exception("Cannot calculate CRC of PAKS")
-        crc = 0xffffffff
-        self._fd.seek(self._offset + self._sections[0].start)
-
+        raw_crc32_func = crcmod.mkCrcFun(poly=0x104C11DB7, initCrc=0, rev=True, xorOut=0)
+        crc = 0
+        self._fd.seek(int(self._offset + self._sections[0].start))
         for chunk in iter(lambda: self._fd.read(CHUNK_SIZE), b''):
-            crc = zlib.crc32(chunk, crc)
-
-        buf = b'\2\0\0\0'  # TODO explain...
-        crc = zlib.crc32(buf, crc)
+            crc = raw_crc32_func(chunk, crc)
+        buf = struct.pack("<Q", 2)
+        crc = raw_crc32_func(buf, crc)
 
         self._fd.seek(self._offset + sizeof(self._header))
-        buf = self._fd.read(len(self.sections) * sizeof(self._sections[0]))
-        crc = zlib.crc32(buf, crc)
-
-        crc = crc ^ 0xffffffff
-        return crc
+        section_size = 72
+        for _ in range(len(self.sections)):
+            chunk = self._fd.read(section_size)
+            if not chunk or len(chunk) != section_size:
+                break
+            crc &= 0xffffffff
+            crc = raw_crc32_func(chunk, crc)
+        return crc & 0xffffffff
 
     def extract_section(self, section):
         self._fd.seek(self._offset + section.start)
