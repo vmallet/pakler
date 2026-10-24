@@ -12,6 +12,7 @@ from pathlib import Path
 from zipfile import ZipExtFile
 
 from pakler.structure import (
+    quote_string,
     PAK32Header,
     PAK32Section,
     PAK64Header,
@@ -39,6 +40,16 @@ PAK_MAGICS_BYTES = (PAK_MAGIC_BYTES, PAK_MAGIC2_BYTES, PAKS_MAGIC_BYTES)
 
 HEADER_CRC_OFFSET = 4  # Offset of the CRC in the file
 HEADER_CRC_OFFSET_64 = 8
+
+PAKS_CRC_OFFSET = 0x04  # File CRC, covers everything from PAKS_CRC_START to the end of the file
+PAKS_CRC_START = 0x08  # First byte covered by the file CRC (file_size field), i.e. right after the file CRC
+PAKS_BOARD_CRC_OFFSET = 0x18  # Board CRC, covers everything from PAKS_BOARD_CRC_START to the end of the board
+PAKS_BOARD_CRC_START = 0x1c  # First byte covered by the board CRC (hwver field), i.e. right after the board CRC
+
+
+def paks_crc(data, crc=0):
+    """CRC used by PAKS files: standard CRC-32 table, but without initial and final XOR (bc_gen_crc)."""
+    return zlib.crc32(data, crc ^ 0xffffffff) ^ 0xffffffff
 
 
 class PAKType(Enum):
@@ -105,7 +116,7 @@ class PAK:
     def calc_crc(self):
         """Calculate the PAK file's CRC (which should match the header's CRC)."""
         if self._pak_type == PAKType.PAKS:
-            raise Exception("Cannot calculate CRC of PAKS")
+            return self._calc_paks_crc(PAKS_CRC_START)
         crc = 0xffffffff
         self._fd.seek(self._offset + self._sections[0].start)
 
@@ -120,6 +131,30 @@ class PAK:
         crc = zlib.crc32(buf, crc)
 
         crc = crc ^ 0xffffffff
+        return crc
+
+    def calc_board_crc(self):
+        """Calculate the CRC of the PAKS board (which should match the header's board CRC)."""
+        return self._calc_paks_crc(PAKS_BOARD_CRC_START)
+
+    def calc_section_crc(self, section):
+        """Calculate the CRC of a PAKS section's data (which should match the section's checksum)."""
+        crc = 0
+        self._fd.seek(self._offset + section.start)
+        remaining = section.len
+        while remaining > 0:
+            chunk = self._fd.read(min(CHUNK_SIZE, remaining))
+            if not chunk:
+                raise Exception(f"Unexpected end of file in section {section.name}")
+            crc = paks_crc(chunk, crc)
+            remaining -= len(chunk)
+        return crc
+
+    def _calc_paks_crc(self, start):
+        crc = 0
+        self._fd.seek(self._offset + start)
+        for chunk in iter(lambda: self._fd.read(CHUNK_SIZE), b''):
+            crc = paks_crc(chunk, crc)
         return crc
 
     def extract_section(self, section):
@@ -148,6 +183,12 @@ class PAK:
                 _print(f"Skipping empty section {num}", quiet=quiet)
 
     def debug_str(self):
+        if self._pak_type == PAKType.PAKS:
+            h = self._header
+            return ('Header  magic=0x{:08x}  crc32=0x{:08x}  file_size=0x{:08x}  boards={}  board={}  fwver={}'
+                    '  board_crc32=0x{:08x}  data_size=0x{:08x}  sections=<{}>').format(
+                h.magic, h.crc32, h.file_size, h.nb_boards, quote_string(h.hwver), quote_string(h.fwver),
+                h.board_crc32, h.data_size, len(self.sections))
         return 'Header  magic=0x{:08x}  crc32=0x{:08x}  type=0x{:08x}  sections=<{}>  mtd_parts=<{}>'.format(
             self.magic, self.crc, self.type, len(self.sections), len(self.partitions))
 
@@ -161,11 +202,14 @@ class PAK:
     def _read_file(self):
         self._fd.seek(self._offset + sizeof(self._header))
         if self._pak_type == PAKType.PAKS:
+            if self._header.ext_len:
+                raise Exception(f"Unsupported PAKS file: ext_len={self._header.ext_len}")
+            self._fd.seek(self._header.board_ext_len, 1)
             for _ in range(self._header.nb_sections):
                 section = PAKSSection.from_fd(self._fd)
-                section._start = self._fd.tell() - self._offset
+                section._start = self._fd.tell() + section.ext_len - self._offset
                 self._sections.append(section)
-                self._fd.seek(section.len, 1)
+                self._fd.seek(section.ext_len + section.len, 1)
         else:
             cls = PAK64Section if self.is64 else PAK32Section
             while True:
@@ -226,8 +270,36 @@ class PAK:
         return cls.from_fd(open(path, "rb"), offset)
 
 
+def check_paks_crc(pak, filename):
+    """Check the file, board and section CRCs of a PAKS file."""
+    ok = True
+    for section in pak.sections:
+        crc = pak.calc_section_crc(section)
+        if crc != section.checksum:
+            print(f"CRC MISMATCH, section: {section.name}, section.crc=0x{section.checksum:08x}, got=0x{crc:08x}")
+            ok = False
+    for name, expected, crc in (("board", pak.header.board_crc32, pak.calc_board_crc()),
+                                ("file", pak.header.crc32, pak.calc_crc())):
+        if crc != expected:
+            print(f"CRC MISMATCH, {name}: {filename}, header.crc=0x{expected:08x}, got=0x{crc:08x}")
+            ok = False
+    if ok:
+        print(f"File passes CRC check: {filename}")
+    return ok
+
+
 def check_crc(filename):
     """Check the PAK file's crc matches the crc in its header."""
+    if isinstance(filename, ZipExtFile):
+        with PAK.from_fd(filename) as pak:
+            if pak.pak_type == PAKType.PAKS:
+                return check_paks_crc(pak, filename.name)
+        filename.seek(0)
+    else:
+        with PAK.from_file(filename) as pak:
+            if pak.pak_type == PAKType.PAKS:
+                return check_paks_crc(pak, filename)
+
     if isinstance(filename, ZipExtFile):
         with PAK.from_fd(filename) as pak:
             header = pak.header
@@ -280,21 +352,115 @@ def copy(fin, fout, length):
         length -= chunk_size
 
 
-def replace_section(filename, section_file: Path, section_num, output_file: Path):
+def update_paks_crc(filename):
+    """Recompute the board and file CRCs of a PAKS file and store them in its header.
+    Section CRCs are not touched.
+    """
+    with PAK.from_file(filename) as pak:
+        if pak.header.nb_boards != 1:
+            raise Exception(f"Unsupported PAKS file containing multiple boards: {pak.header.nb_boards} boards")
+        board_crc = pak.calc_board_crc()
+    with open(filename, "r+b") as f:
+        f.seek(PAKS_BOARD_CRC_OFFSET)
+        f.write(struct.pack("<I", board_crc))
+    # The file CRC covers the board CRC, so it has to be computed afterwards.
+    with PAK.from_file(filename) as pak:
+        crc = pak.calc_crc()
+    with open(filename, "r+b") as f:
+        f.seek(PAKS_CRC_OFFSET)
+        f.write(struct.pack("<I", crc))
+
+
+def replace_paks_section(filename, section_file: Path, section_num, output_file: Path, section_version=None,
+                         fw_version=None):
+    """Copy the given PAKS file into new output_file, replacing the specified section and updating all CRCs.
+
+    :param section_version: new version string of the section. The device skips sections whose name and
+        version match what is already installed, so a modified section needs a new version to be flashed.
+    :param fw_version: new firmware version string of the board. The device refuses the whole update if it
+        matches the currently installed firmware version.
+    """
+    with PAK.from_file(filename) as pak:
+        if pak.header.nb_boards != 1:
+            raise Exception(f"Unsupported PAKS file containing multiple boards: {pak.header.nb_boards} boards")
+        if section_num < 0 or section_num >= len(pak.sections):
+            raise Exception(f"Invalid section number: {section_num} (should be between 0 and {len(pak.sections) - 1})")
+        replaced = pak.sections[section_num]
+        section_len = section_file.stat().st_size
+        if replaced.partition_size and section_len > replaced.partition_size:
+            raise Exception(f"Section file too big: {section_len} bytes > partition size {replaced.partition_size}")
+        if section_version is not None and len(section_version.encode()) >= PAKSSection._version.size:
+            raise Exception(f"Section version too long: {section_version!r}")
+        if fw_version is not None and len(fw_version.encode()) >= PAKSHeader._fwver.size:
+            raise Exception(f"Firmware version too long: {fw_version!r}")
+
+        print(f"Input            : {filename}")
+        print(f"Output           : {output_file}")
+        print(f"Replacing section: {section_num} ({replaced.name})")
+        print(f"Replacement file : {section_file}")
+
+        with open(section_file, "rb") as fsection, open(output_file, "wb") as fout:
+            header = pak.header
+            fout.write(bytes(header))
+            pak._fd.seek(pak._offset + sizeof(header))
+            copy(pak._fd, fout, header.board_ext_len)
+            for num, section in enumerate(pak.sections):
+                pak._fd.seek(pak._offset + section.start - section.ext_len)
+                section_pos = fout.tell()
+                fout.write(bytes(section))
+                copy(pak._fd, fout, section.ext_len)
+                if num == section_num:
+                    print(f"Replacing section {num} ({section.len} bytes) with {section_len} bytes")
+                    crc = 0
+                    for chunk in iter(lambda: fsection.read(CHUNK_SIZE), b''):
+                        crc = paks_crc(chunk, crc)
+                        fout.write(chunk)
+                    section._len = section_len
+                    section._checksum = crc
+                    if section_version is not None:
+                        section._version = section_version.encode()
+                    end = fout.tell()
+                    fout.seek(section_pos)
+                    fout.write(bytes(section))
+                    fout.seek(end)
+                else:
+                    copy(pak._fd, fout, section.len)
+            header._file_size = fout.tell()
+            header._data_size = fout.tell() - sizeof(header)
+            if fw_version is not None:
+                header._fwver = fw_version.encode()
+            fout.seek(0)
+            fout.write(bytes(header))
+
+    print("Updating CRC...")
+    update_paks_crc(output_file)
+
+    print("Replacement completed. New header: ")
+    with PAK.from_file(output_file) as pak:
+        pak.print_debug()
+
+
+def replace_section(filename, section_file: Path, section_num, output_file: Path, section_version=None,
+                    fw_version=None):
     """Copy the given PAK file into new output_file, replacing the specified section.
 
     :param filename: name of the input PAK firmware file
     :param section_file: name of the file containing the section to be swapped-in
     :param section_num: number of the section to be replaced
     :param output_file: name of the output file which will contained the modified PAK file
+    :param section_version: new version string of the section (PAKS only)
+    :param fw_version: new firmware version string of the board (PAKS only)
     """
-    with PAK.from_file(filename) as pak:
-        if pak.pak_type == PAKType.PAKS:
-            raise Exception("Cannot replace section of PAKS")
-        section_count = len(pak.sections)
-
     if not section_file.is_file():
         raise Exception(f"Section file doesn't exist or is not a file: {section_file}")
+
+    with PAK.from_file(filename) as pak:
+        pak_type = pak.pak_type
+        section_count = len(pak.sections)
+    if pak_type == PAKType.PAKS:
+        return replace_paks_section(filename, section_file, section_num, output_file, section_version, fw_version)
+    if section_version is not None or fw_version is not None:
+        raise Exception("Setting the section or firmware version is only supported for PAKS files")
 
     section_len = section_file.stat().st_size
 

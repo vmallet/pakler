@@ -1,6 +1,6 @@
 # pakler
 
-Pakler is a command-line tool and library used to manipulate `.pak` firmware files
+Pakler is a command-line tool and library used to manipulate `.pak` and `.paks` firmware files
 used by Swann and Reolink devices. You can list, extract, and replace their
 content. It makes it easy to explore and patch firmwares used by various
 NVRs, DVRs and IP cameras.
@@ -38,9 +38,9 @@ pakler -h
 
 Note: list and extract also work with ZIPs that contain `.pak` files.
 
-### Viewing content of `.pak` files
+### Viewing content of `.pak(s)` files
 
-Listing the contents of a `.pak` file is pretty straightforward: invoke the
+Listing the contents of a `.pak(s)` file is pretty straightforward: invoke the
 tool with the name of the firmware file on the command line.
 
 ```shell
@@ -72,9 +72,9 @@ Header  magic=32725913  crc32=0250e72d  type=00002302  sections=<10>  mtd_parts=
 File passes CRC check: NVR8-7400_1705_3438_1103.pak
 ```
 
-### Extracting content of `.pak` files
+### Extracting content of `.pak(s)` files
 
-Contents of a `.pak` file can be extracted using the `-e` command. If no
+Contents of a `.pak(s)` file can be extracted using the `-e` command. If no
 output directory is specified using the `-d` parameter, a default unique
 output directory will be created by appending `.extracted` to the name of
 the `.pak` file.
@@ -98,6 +98,42 @@ Skipping empty section 9
 Skipping empty section 10
 ```
 
+### Replacing content of `.paks` files
+
+Since October 2025, Reolink has introduced the new `.paks` update format, which has
+a more universal and extensible structure than the `.pak` format. \
+A `.paks` file is made up of one or more boards (e. g. different hardware versions)
+and sections of each board, and at the moment you can replace only one section
+of the first board at a time. To replace a section you need to 
+use the `-r` command, specify the number of the section to replace with `-n`,
+the file to use as a replacement with `-f`,
+the new version of the section with `-V` (must be different from the one in `[app]/version.json`),
+the new main firmware version with `-F` (must be different from the one in `[app]/version.json`),
+and the output file to write the resulting patched file with `-o`.
+
+Here is an example where we replace the `.paks` file's section #5 with the file `patched_fs.bin`.
+
+```shell
+pakler E1-Outdoor-Pro.5714_2511271366.IPC_560SD88MPW.paks -r -n 5 -V v3.1.0.5714_2511271367 -F v3.1.0.5714_2511271367 -f patched_fs.bin -o patched_fw.pak
+```
+
+```
+Input            : E1-Outdoor-Pro.5714_2511271366.IPC_560SD88MPW.paks
+Output           : patched_fw.pak
+Replacing section: 5 (app)
+Replacement file : patched_fs.bin
+Replacing section 5 (10485760 bytes) with 10485760 bytes
+Updating CRC...
+Replacement completed. New header: 
+Header  magic=0x50414b53  crc32=0x6ee4e334  file_size=0x0190052c  boards=1  board="IPC_560SD88MPW"  fwver="v3.1.0.5714_2511271367"  board_crc32=0x84ffc8ee  data_size=0x019004c4  sections=<6>
+    Section  0 name="loader"         version="11223"                  start=0x000000c0  len=0x00008000  crc32=0x9200cdf7  flash=0x00000000  part_size=0x00040000
+    Section  1 name="fdt"            version="11436"                  start=0x00008118  len=0x00004118  crc32=0x87d0f7ff  flash=0x00040000  part_size=0x00040000
+    Section  2 name="uboot"          version="10541"                  start=0x0000c288  len=0x0005ffd4  crc32=0x5800653d  flash=0x00080000  part_size=0x00100000
+    Section  3 name="kernel"         version="14460"                  start=0x0006c2b4  len=0x001b41c8  crc32=0xc7a475da  flash=0x00180000  part_size=0x00400000
+    Section  4 name="rootfs"         version="110683"                 start=0x002204d4  len=0x00ce0000  crc32=0xa037c519  flash=0x00580000  part_size=0x00f00000
+    Section  5 name="app"            version="v3.1.0.5714_2511271367" start=0x00f0052c  len=0x00a00000  crc32=0x5340190a  flash=0x01480000  part_size=0x00b00000
+```
+
 ### Replacing content of `.pak` files
 
 A `.pak` file is made up of multiple sections, and at the moment you can
@@ -111,7 +147,7 @@ file `patched_fs.bin`
 
 ```shell
 pakler NT98312_NVR_8IP_REOLINK_L300_130_21060706.pak -r -n 5 -f patched_fs.bin -o patched_fw.pak
-````
+```
 
 ```
 Input            : NT98312_NVR_8IP_REOLINK_L300_130_21060706.pak

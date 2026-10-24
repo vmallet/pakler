@@ -87,6 +87,12 @@ def parse_args():
                         help='Extract sections to a directory')
     parser.add_argument('-f', '--section-file', dest='section_file', type=Path, help='Input binary file for section replacement')
     parser.add_argument('-n', '--section-num', dest='section_num', type=int, help='Section number of replaced section')
+    parser.add_argument('-V', '--section-version', dest='section_version',
+                        help='New version string of the replaced section (PAKS only). The device skips sections'
+                             ' whose version is already installed')
+    parser.add_argument('-F', '--fw-version', dest='fw_version',
+                        help='New firmware version string of the board when replacing a section (PAKS only). The'
+                             ' device refuses the update if this version is already installed')
     parser.add_argument('-o', '--output', dest='output_pak', type=Path, help='Name of output PAK file when replacing a section')
     parser.add_argument('-d', '--output-dir', dest='output_dir', type=Path,
                         help='Name of output directory when extracting sections')
@@ -152,7 +158,8 @@ def main():
             raise Exception("replace error: need both section binary file and section number to do a replacement;"
                             " see help")
         output_file = args.output_pak or make_output_file_name(filename)
-        replace_section(filename, args.section_file, args.section_num, output_file)
+        replace_section(filename, args.section_file, args.section_num, output_file, args.section_version,
+                        args.fw_version)
 
 
 if __name__ == "__main__":

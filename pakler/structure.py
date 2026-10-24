@@ -148,23 +148,49 @@ class PAKPartition(_Base):
 
 class PAKSHeader(_Base):
     _fields_ = [
-        ("_magic", c_uint32),
-        ("_unknown0", c_uint32),  # one of these is probably a checksum (maybe both)
-        ("_file_size", c_uint32),
-        ("_unknown1", c_uint32),  # always 1?
-        ("_unknown2", c_uint32),  # always 0?
-        ("_bdid", c_uint32),
-        ("_unknown3", c_uint32),  # one of these is probably a checksum (maybe both)
-        ("_hwver", c_char * 32),
-        ("_fwver", c_char * 32),
-        ("_data_size", c_uint32),  # _file_size - 104 (header size)
-        ("_nb_sections", c_uint32),
-        ("_unknown4", c_uint32),  # always 0?
+        # File header
+        ("_magic", c_uint32),  # "SKAP" (also accepted: "LOER")
+        ("_crc32", c_uint32),  # paks_crc() of everything from offset 8 up to the end of the file
+        ("_file_size", c_uint32), # total length of the paks file
+        ("_nb_boards", c_uint32), # number of following board headers (paks files can include multiple hardware versions with their own sections)
+        ("_ext_len", c_uint32),  # extra bytes skipped between file header and first board header
+        # Board header
+        ("_board_magic", c_uint32),  # "DIDB"
+        ("_board_crc32", c_uint32),  # paks_crc() from _hwver up to the end of the board's data
+        ("_hwver", c_char * 32),  # hardware version, e.g. "IPC_560SD88MPW"; matched against the device's board type
+        ("_fwver", c_char * 32),  # upgrade is refused if equal to the currently installed version specified in [app]/version.json
+        ("_data_size", c_uint32),  # size of everything following the board header (image headers + data)
+        ("_nb_sections", c_uint32), # number of following sections for this board
+        ("_board_ext_len", c_uint32),  # extra bytes skipped between board header and first image header
     ]
 
     @property
     def magic(self):
         return self._magic
+
+    @property
+    def crc32(self):
+        return self._crc32
+
+    @property
+    def nb_boards(self):
+        return self._nb_boards
+
+    @property
+    def ext_len(self):
+        return self._ext_len
+
+    @property
+    def board_magic(self):
+        return self._board_magic
+
+    @property
+    def board_crc32(self):
+        return self._board_crc32
+
+    @property
+    def board_ext_len(self):
+        return self._board_ext_len
 
     @property
     def file_size(self):
@@ -188,20 +214,37 @@ class PAKSHeader(_Base):
 
 
 class PAKSSection(_Base):
+    """Image header (0x58 bytes), followed by _ext_len extra bytes and then _len bytes of image data."""
     _fields_ = [
-        ("_imgs", c_uint32),
-        ("_checksum", c_uint32),
-        ("_name", c_char * 32),
-        ("_version", c_char * 32),
-        ("_len", c_uint32),
-        ("_unknown0", c_uint32),  # may be equal for different firmwares of the same device. might be needed during upgrade process?. always higher than previous section's?
-        ("_unknown1", c_uint32),  # may be equal for different firmwares of the same device. might be needed during upgrade process?
-        ("_unknown2", c_uint32),  # always 0?
+        ("_magic", c_uint32),  # "SGMI"
+        ("_checksum", c_uint32),  # paks_crc() of the image data only (excluding header and extra bytes)
+        ("_name", c_char * 32),  # partition name
+        ("_version", c_char * 32),  # image is skipped if the device already has this name with this version
+        ("_len", c_uint32), # total length of the image itself
+        ("_flash_offset", c_uint32),  # absolute flash address the image is written to (0xffffffff: not flashed)
+        ("_partition_size", c_uint32), # size of the flash partition on the device
+        ("_ext_len", c_uint32), # extra bytes skipped between image header and image data
     ]
+
+    @property
+    def magic(self):
+        return self._magic
 
     @property
     def checksum(self):
         return self._checksum
+
+    @property
+    def flash_offset(self):
+        return self._flash_offset
+
+    @property
+    def partition_size(self):
+        return self._partition_size
+
+    @property
+    def ext_len(self):
+        return self._ext_len
 
     @property
     def name(self):
@@ -223,8 +266,10 @@ class PAKSSection(_Base):
         return f"{self.__class__.__qualname__}({self.name!r})"
 
     def debug_str(self, num):
-        return 'Section {:2} name={:16} version={:16} start=0x{:08x}  len=0x{:08x}  (start={:8} len={:8})'.format(
-            num, quote_string(self.name), quote_string(self.version), self.start, self.len, self.start, self.len)
+        return ('Section {:2} name={:16} version={:24} start=0x{:08x}  len=0x{:08x}  crc32=0x{:08x}'
+                '  flash=0x{:08x}  part_size=0x{:08x}').format(
+            num, quote_string(self.name), quote_string(self.version), self.start, self.len, self.checksum,
+            self.flash_offset, self.partition_size)
 
 
 def quote_string(string):
